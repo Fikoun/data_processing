@@ -1,6 +1,8 @@
 <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #76c045 !important;">
   <a class="navbar-brand" href="#">
-    <img src="{{{ asset('favico.ico') }}}" width="30" height="30" class="d-inline-block align-top" alt="">
+    <a href="{{ route('home') }}">
+      <img src="{{{ asset('favico.ico') }}}" width="30" height="30" class="d-inline-block align-top" alt="">
+    </a>
     Data Processing
   </a>
   <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
