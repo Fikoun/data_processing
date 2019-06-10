@@ -1,0 +1,3 @@
+cd \xampp\htdocs\
+git clone https://github.com/Fikoun/data_processing.git
+composer install
