@@ -21,4 +21,15 @@ class CommonController extends Controller
     {
         return view('common.documentation');
     }
+
+    public function set($type)
+    {
+        var_dump($type);
+        var_dump(request('value'));
+        if ($type == 'voltage') {
+            $value = (int)request('value');
+            var_dump("python set.py $value");
+            var_dump(passthru("python set.py $value"));
+        }
+    }
 }

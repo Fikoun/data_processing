@@ -113,7 +113,6 @@ var buildURL = __webpack_require__(/*! ./../helpers/buildURL */ "./node_modules/
 var parseHeaders = __webpack_require__(/*! ./../helpers/parseHeaders */ "./node_modules/axios/lib/helpers/parseHeaders.js");
 var isURLSameOrigin = __webpack_require__(/*! ./../helpers/isURLSameOrigin */ "./node_modules/axios/lib/helpers/isURLSameOrigin.js");
 var createError = __webpack_require__(/*! ../core/createError */ "./node_modules/axios/lib/core/createError.js");
-var btoa = (typeof window !== 'undefined' && window.btoa && window.btoa.bind(window)) || __webpack_require__(/*! ./../helpers/btoa */ "./node_modules/axios/lib/helpers/btoa.js");
 
 module.exports = function xhrAdapter(config) {
   return new Promise(function dispatchXhrRequest(resolve, reject) {
@@ -125,22 +124,6 @@ module.exports = function xhrAdapter(config) {
     }
 
     var request = new XMLHttpRequest();
-    var loadEvent = 'onreadystatechange';
-    var xDomain = false;
-
-    // For IE 8/9 CORS support
-    // Only supports POST and GET calls and doesn't returns the response headers.
-    // DON'T do this for testing b/c XMLHttpRequest is mocked, not XDomainRequest.
-    if ( true &&
-        typeof window !== 'undefined' &&
-        window.XDomainRequest && !('withCredentials' in request) &&
-        !isURLSameOrigin(config.url)) {
-      request = new window.XDomainRequest();
-      loadEvent = 'onload';
-      xDomain = true;
-      request.onprogress = function handleProgress() {};
-      request.ontimeout = function handleTimeout() {};
-    }
 
     // HTTP basic authentication
     if (config.auth) {
@@ -155,8 +138,8 @@ module.exports = function xhrAdapter(config) {
     request.timeout = config.timeout;
 
     // Listen for ready state
-    request[loadEvent] = function handleLoad() {
-      if (!request || (request.readyState !== 4 && !xDomain)) {
+    request.onreadystatechange = function handleLoad() {
+      if (!request || request.readyState !== 4) {
         return;
       }
 
@@ -173,15 +156,26 @@ module.exports = function xhrAdapter(config) {
       var responseData = !config.responseType || config.responseType === 'text' ? request.responseText : request.response;
       var response = {
         data: responseData,
-        // IE sends 1223 instead of 204 (https://github.com/axios/axios/issues/201)
-        status: request.status === 1223 ? 204 : request.status,
-        statusText: request.status === 1223 ? 'No Content' : request.statusText,
+        status: request.status,
+        statusText: request.statusText,
         headers: responseHeaders,
         config: config,
         request: request
       };
 
       settle(resolve, reject, response);
+
+      // Clean up request
+      request = null;
+    };
+
+    // Handle browser request cancellation (as opposed to a manual cancellation)
+    request.onabort = function handleAbort() {
+      if (!request) {
+        return;
+      }
+
+      reject(createError('Request aborted', config, 'ECONNABORTED', request));
 
       // Clean up request
       request = null;
@@ -214,8 +208,8 @@ module.exports = function xhrAdapter(config) {
 
       // Add xsrf header
       var xsrfValue = (config.withCredentials || isURLSameOrigin(config.url)) && config.xsrfCookieName ?
-          cookies.read(config.xsrfCookieName) :
-          undefined;
+        cookies.read(config.xsrfCookieName) :
+        undefined;
 
       if (xsrfValue) {
         requestHeaders[config.xsrfHeaderName] = xsrfValue;
@@ -302,6 +296,7 @@ module.exports = function xhrAdapter(config) {
 var utils = __webpack_require__(/*! ./utils */ "./node_modules/axios/lib/utils.js");
 var bind = __webpack_require__(/*! ./helpers/bind */ "./node_modules/axios/lib/helpers/bind.js");
 var Axios = __webpack_require__(/*! ./core/Axios */ "./node_modules/axios/lib/core/Axios.js");
+var mergeConfig = __webpack_require__(/*! ./core/mergeConfig */ "./node_modules/axios/lib/core/mergeConfig.js");
 var defaults = __webpack_require__(/*! ./defaults */ "./node_modules/axios/lib/defaults.js");
 
 /**
@@ -331,7 +326,7 @@ axios.Axios = Axios;
 
 // Factory for creating new instances
 axios.create = function create(instanceConfig) {
-  return createInstance(utils.merge(defaults, instanceConfig));
+  return createInstance(mergeConfig(axios.defaults, instanceConfig));
 };
 
 // Expose Cancel & CancelToken
@@ -480,10 +475,11 @@ module.exports = function isCancel(value) {
 "use strict";
 
 
-var defaults = __webpack_require__(/*! ./../defaults */ "./node_modules/axios/lib/defaults.js");
 var utils = __webpack_require__(/*! ./../utils */ "./node_modules/axios/lib/utils.js");
+var buildURL = __webpack_require__(/*! ../helpers/buildURL */ "./node_modules/axios/lib/helpers/buildURL.js");
 var InterceptorManager = __webpack_require__(/*! ./InterceptorManager */ "./node_modules/axios/lib/core/InterceptorManager.js");
 var dispatchRequest = __webpack_require__(/*! ./dispatchRequest */ "./node_modules/axios/lib/core/dispatchRequest.js");
+var mergeConfig = __webpack_require__(/*! ./mergeConfig */ "./node_modules/axios/lib/core/mergeConfig.js");
 
 /**
  * Create a new instance of Axios
@@ -507,13 +503,14 @@ Axios.prototype.request = function request(config) {
   /*eslint no-param-reassign:0*/
   // Allow for axios('example/url'[, config]) a la fetch API
   if (typeof config === 'string') {
-    config = utils.merge({
-      url: arguments[0]
-    }, arguments[1]);
+    config = arguments[1] || {};
+    config.url = arguments[0];
+  } else {
+    config = config || {};
   }
 
-  config = utils.merge(defaults, {method: 'get'}, this.defaults, config);
-  config.method = config.method.toLowerCase();
+  config = mergeConfig(this.defaults, config);
+  config.method = config.method ? config.method.toLowerCase() : 'get';
 
   // Hook up interceptors middleware
   var chain = [dispatchRequest, undefined];
@@ -532,6 +529,11 @@ Axios.prototype.request = function request(config) {
   }
 
   return promise;
+};
+
+Axios.prototype.getUri = function getUri(config) {
+  config = mergeConfig(this.defaults, config);
+  return buildURL(config.url, config.params, config.paramsSerializer).replace(/^\?/, '');
 };
 
 // Provide aliases for supported request methods
@@ -778,9 +780,93 @@ module.exports = function enhanceError(error, config, code, request, response) {
   if (code) {
     error.code = code;
   }
+
   error.request = request;
   error.response = response;
+  error.isAxiosError = true;
+
+  error.toJSON = function() {
+    return {
+      // Standard
+      message: this.message,
+      name: this.name,
+      // Microsoft
+      description: this.description,
+      number: this.number,
+      // Mozilla
+      fileName: this.fileName,
+      lineNumber: this.lineNumber,
+      columnNumber: this.columnNumber,
+      stack: this.stack,
+      // Axios
+      config: this.config,
+      code: this.code
+    };
+  };
   return error;
+};
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/lib/core/mergeConfig.js":
+/*!****************************************************!*\
+  !*** ./node_modules/axios/lib/core/mergeConfig.js ***!
+  \****************************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+
+
+var utils = __webpack_require__(/*! ../utils */ "./node_modules/axios/lib/utils.js");
+
+/**
+ * Config-specific merge-function which creates a new config-object
+ * by merging two configuration objects together.
+ *
+ * @param {Object} config1
+ * @param {Object} config2
+ * @returns {Object} New object resulting from merging config2 to config1
+ */
+module.exports = function mergeConfig(config1, config2) {
+  // eslint-disable-next-line no-param-reassign
+  config2 = config2 || {};
+  var config = {};
+
+  utils.forEach(['url', 'method', 'params', 'data'], function valueFromConfig2(prop) {
+    if (typeof config2[prop] !== 'undefined') {
+      config[prop] = config2[prop];
+    }
+  });
+
+  utils.forEach(['headers', 'auth', 'proxy'], function mergeDeepProperties(prop) {
+    if (utils.isObject(config2[prop])) {
+      config[prop] = utils.deepMerge(config1[prop], config2[prop]);
+    } else if (typeof config2[prop] !== 'undefined') {
+      config[prop] = config2[prop];
+    } else if (utils.isObject(config1[prop])) {
+      config[prop] = utils.deepMerge(config1[prop]);
+    } else if (typeof config1[prop] !== 'undefined') {
+      config[prop] = config1[prop];
+    }
+  });
+
+  utils.forEach([
+    'baseURL', 'transformRequest', 'transformResponse', 'paramsSerializer',
+    'timeout', 'withCredentials', 'adapter', 'responseType', 'xsrfCookieName',
+    'xsrfHeaderName', 'onUploadProgress', 'onDownloadProgress', 'maxContentLength',
+    'validateStatus', 'maxRedirects', 'httpAgent', 'httpsAgent', 'cancelToken',
+    'socketPath'
+  ], function defaultToConfig2(prop) {
+    if (typeof config2[prop] !== 'undefined') {
+      config[prop] = config2[prop];
+    } else if (typeof config1[prop] !== 'undefined') {
+      config[prop] = config1[prop];
+    }
+  });
+
+  return config;
 };
 
 
@@ -807,8 +893,7 @@ var createError = __webpack_require__(/*! ./createError */ "./node_modules/axios
  */
 module.exports = function settle(resolve, reject, response) {
   var validateStatus = response.config.validateStatus;
-  // Note: status is not exposed by XDomainRequest
-  if (!response.status || !validateStatus || validateStatus(response.status)) {
+  if (!validateStatus || validateStatus(response.status)) {
     resolve(response);
   } else {
     reject(createError(
@@ -881,12 +966,13 @@ function setContentTypeIfUnset(headers, value) {
 
 function getDefaultAdapter() {
   var adapter;
-  if (typeof XMLHttpRequest !== 'undefined') {
-    // For browsers use XHR adapter
-    adapter = __webpack_require__(/*! ./adapters/xhr */ "./node_modules/axios/lib/adapters/xhr.js");
-  } else if (typeof process !== 'undefined') {
+  // Only Node.JS has a process variable that is of [[Class]] process
+  if (typeof process !== 'undefined' && Object.prototype.toString.call(process) === '[object process]') {
     // For node use HTTP adapter
     adapter = __webpack_require__(/*! ./adapters/http */ "./node_modules/axios/lib/adapters/xhr.js");
+  } else if (typeof XMLHttpRequest !== 'undefined') {
+    // For browsers use XHR adapter
+    adapter = __webpack_require__(/*! ./adapters/xhr */ "./node_modules/axios/lib/adapters/xhr.js");
   }
   return adapter;
 }
@@ -895,6 +981,7 @@ var defaults = {
   adapter: getDefaultAdapter(),
 
   transformRequest: [function transformRequest(data, headers) {
+    normalizeHeaderName(headers, 'Accept');
     normalizeHeaderName(headers, 'Content-Type');
     if (utils.isFormData(data) ||
       utils.isArrayBuffer(data) ||
@@ -988,54 +1075,6 @@ module.exports = function bind(fn, thisArg) {
 
 /***/ }),
 
-/***/ "./node_modules/axios/lib/helpers/btoa.js":
-/*!************************************************!*\
-  !*** ./node_modules/axios/lib/helpers/btoa.js ***!
-  \************************************************/
-/*! no static exports found */
-/***/ (function(module, exports, __webpack_require__) {
-
-"use strict";
-
-
-// btoa polyfill for IE<10 courtesy https://github.com/davidchambers/Base64.js
-
-var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-
-function E() {
-  this.message = 'String contains an invalid character';
-}
-E.prototype = new Error;
-E.prototype.code = 5;
-E.prototype.name = 'InvalidCharacterError';
-
-function btoa(input) {
-  var str = String(input);
-  var output = '';
-  for (
-    // initialize result and counter
-    var block, charCode, idx = 0, map = chars;
-    // if the next str index does not exist:
-    //   change the mapping table to "="
-    //   check if d has no fractional digits
-    str.charAt(idx | 0) || (map = '=', idx % 1);
-    // "8 - idx % 1 * 8" generates the sequence 2, 4, 6, 8
-    output += map.charAt(63 & block >> 8 - idx % 1 * 8)
-  ) {
-    charCode = str.charCodeAt(idx += 3 / 4);
-    if (charCode > 0xFF) {
-      throw new E();
-    }
-    block = block << 8 | charCode;
-  }
-  return output;
-}
-
-module.exports = btoa;
-
-
-/***/ }),
-
 /***/ "./node_modules/axios/lib/helpers/buildURL.js":
 /*!****************************************************!*\
   !*** ./node_modules/axios/lib/helpers/buildURL.js ***!
@@ -1105,6 +1144,11 @@ module.exports = function buildURL(url, params, paramsSerializer) {
   }
 
   if (serializedParams) {
+    var hashmarkIndex = url.indexOf('#');
+    if (hashmarkIndex !== -1) {
+      url = url.slice(0, hashmarkIndex);
+    }
+
     url += (url.indexOf('?') === -1 ? '?' : '&') + serializedParams;
   }
 
@@ -1156,50 +1200,50 @@ module.exports = (
   utils.isStandardBrowserEnv() ?
 
   // Standard browser envs support document.cookie
-  (function standardBrowserEnv() {
-    return {
-      write: function write(name, value, expires, path, domain, secure) {
-        var cookie = [];
-        cookie.push(name + '=' + encodeURIComponent(value));
+    (function standardBrowserEnv() {
+      return {
+        write: function write(name, value, expires, path, domain, secure) {
+          var cookie = [];
+          cookie.push(name + '=' + encodeURIComponent(value));
 
-        if (utils.isNumber(expires)) {
-          cookie.push('expires=' + new Date(expires).toGMTString());
+          if (utils.isNumber(expires)) {
+            cookie.push('expires=' + new Date(expires).toGMTString());
+          }
+
+          if (utils.isString(path)) {
+            cookie.push('path=' + path);
+          }
+
+          if (utils.isString(domain)) {
+            cookie.push('domain=' + domain);
+          }
+
+          if (secure === true) {
+            cookie.push('secure');
+          }
+
+          document.cookie = cookie.join('; ');
+        },
+
+        read: function read(name) {
+          var match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
+          return (match ? decodeURIComponent(match[3]) : null);
+        },
+
+        remove: function remove(name) {
+          this.write(name, '', Date.now() - 86400000);
         }
-
-        if (utils.isString(path)) {
-          cookie.push('path=' + path);
-        }
-
-        if (utils.isString(domain)) {
-          cookie.push('domain=' + domain);
-        }
-
-        if (secure === true) {
-          cookie.push('secure');
-        }
-
-        document.cookie = cookie.join('; ');
-      },
-
-      read: function read(name) {
-        var match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
-        return (match ? decodeURIComponent(match[3]) : null);
-      },
-
-      remove: function remove(name) {
-        this.write(name, '', Date.now() - 86400000);
-      }
-    };
-  })() :
+      };
+    })() :
 
   // Non standard browser env (web workers, react-native) lack needed support.
-  (function nonStandardBrowserEnv() {
-    return {
-      write: function write() {},
-      read: function read() { return null; },
-      remove: function remove() {}
-    };
-  })()
+    (function nonStandardBrowserEnv() {
+      return {
+        write: function write() {},
+        read: function read() { return null; },
+        remove: function remove() {}
+      };
+    })()
 );
 
 
@@ -1248,64 +1292,64 @@ module.exports = (
 
   // Standard browser envs have full support of the APIs needed to test
   // whether the request URL is of the same origin as current location.
-  (function standardBrowserEnv() {
-    var msie = /(msie|trident)/i.test(navigator.userAgent);
-    var urlParsingNode = document.createElement('a');
-    var originURL;
+    (function standardBrowserEnv() {
+      var msie = /(msie|trident)/i.test(navigator.userAgent);
+      var urlParsingNode = document.createElement('a');
+      var originURL;
 
-    /**
+      /**
     * Parse a URL to discover it's components
     *
     * @param {String} url The URL to be parsed
     * @returns {Object}
     */
-    function resolveURL(url) {
-      var href = url;
+      function resolveURL(url) {
+        var href = url;
 
-      if (msie) {
+        if (msie) {
         // IE needs attribute set twice to normalize properties
+          urlParsingNode.setAttribute('href', href);
+          href = urlParsingNode.href;
+        }
+
         urlParsingNode.setAttribute('href', href);
-        href = urlParsingNode.href;
+
+        // urlParsingNode provides the UrlUtils interface - http://url.spec.whatwg.org/#urlutils
+        return {
+          href: urlParsingNode.href,
+          protocol: urlParsingNode.protocol ? urlParsingNode.protocol.replace(/:$/, '') : '',
+          host: urlParsingNode.host,
+          search: urlParsingNode.search ? urlParsingNode.search.replace(/^\?/, '') : '',
+          hash: urlParsingNode.hash ? urlParsingNode.hash.replace(/^#/, '') : '',
+          hostname: urlParsingNode.hostname,
+          port: urlParsingNode.port,
+          pathname: (urlParsingNode.pathname.charAt(0) === '/') ?
+            urlParsingNode.pathname :
+            '/' + urlParsingNode.pathname
+        };
       }
 
-      urlParsingNode.setAttribute('href', href);
+      originURL = resolveURL(window.location.href);
 
-      // urlParsingNode provides the UrlUtils interface - http://url.spec.whatwg.org/#urlutils
-      return {
-        href: urlParsingNode.href,
-        protocol: urlParsingNode.protocol ? urlParsingNode.protocol.replace(/:$/, '') : '',
-        host: urlParsingNode.host,
-        search: urlParsingNode.search ? urlParsingNode.search.replace(/^\?/, '') : '',
-        hash: urlParsingNode.hash ? urlParsingNode.hash.replace(/^#/, '') : '',
-        hostname: urlParsingNode.hostname,
-        port: urlParsingNode.port,
-        pathname: (urlParsingNode.pathname.charAt(0) === '/') ?
-                  urlParsingNode.pathname :
-                  '/' + urlParsingNode.pathname
-      };
-    }
-
-    originURL = resolveURL(window.location.href);
-
-    /**
+      /**
     * Determine if a URL shares the same origin as the current location
     *
     * @param {String} requestURL The URL to test
     * @returns {boolean} True if URL shares the same origin, otherwise false
     */
-    return function isURLSameOrigin(requestURL) {
-      var parsed = (utils.isString(requestURL)) ? resolveURL(requestURL) : requestURL;
-      return (parsed.protocol === originURL.protocol &&
+      return function isURLSameOrigin(requestURL) {
+        var parsed = (utils.isString(requestURL)) ? resolveURL(requestURL) : requestURL;
+        return (parsed.protocol === originURL.protocol &&
             parsed.host === originURL.host);
-    };
-  })() :
+      };
+    })() :
 
   // Non standard browser envs (web workers, react-native) lack needed support.
-  (function nonStandardBrowserEnv() {
-    return function isURLSameOrigin() {
-      return true;
-    };
-  })()
+    (function nonStandardBrowserEnv() {
+      return function isURLSameOrigin() {
+        return true;
+      };
+    })()
 );
 
 
@@ -1450,7 +1494,7 @@ module.exports = function spread(callback) {
 
 
 var bind = __webpack_require__(/*! ./helpers/bind */ "./node_modules/axios/lib/helpers/bind.js");
-var isBuffer = __webpack_require__(/*! is-buffer */ "./node_modules/is-buffer/index.js");
+var isBuffer = __webpack_require__(/*! is-buffer */ "./node_modules/axios/node_modules/is-buffer/index.js");
 
 /*global toString:true*/
 
@@ -1626,9 +1670,13 @@ function trim(str) {
  *
  * react-native:
  *  navigator.product -> 'ReactNative'
+ * nativescript
+ *  navigator.product -> 'NativeScript' or 'NS'
  */
 function isStandardBrowserEnv() {
-  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
+  if (typeof navigator !== 'undefined' && (navigator.product === 'ReactNative' ||
+                                           navigator.product === 'NativeScript' ||
+                                           navigator.product === 'NS')) {
     return false;
   }
   return (
@@ -1710,6 +1758,32 @@ function merge(/* obj1, obj2, obj3, ... */) {
 }
 
 /**
+ * Function equal to merge with the difference being that no reference
+ * to original objects is kept.
+ *
+ * @see merge
+ * @param {Object} obj1 Object to merge
+ * @returns {Object} Result of all merge properties
+ */
+function deepMerge(/* obj1, obj2, obj3, ... */) {
+  var result = {};
+  function assignValue(val, key) {
+    if (typeof result[key] === 'object' && typeof val === 'object') {
+      result[key] = deepMerge(result[key], val);
+    } else if (typeof val === 'object') {
+      result[key] = deepMerge({}, val);
+    } else {
+      result[key] = val;
+    }
+  }
+
+  for (var i = 0, l = arguments.length; i < l; i++) {
+    forEach(arguments[i], assignValue);
+  }
+  return result;
+}
+
+/**
  * Extends object a by mutably adding to it the properties of object b.
  *
  * @param {Object} a The object to be extended
@@ -1747,9 +1821,32 @@ module.exports = {
   isStandardBrowserEnv: isStandardBrowserEnv,
   forEach: forEach,
   merge: merge,
+  deepMerge: deepMerge,
   extend: extend,
   trim: trim
 };
+
+
+/***/ }),
+
+/***/ "./node_modules/axios/node_modules/is-buffer/index.js":
+/*!************************************************************!*\
+  !*** ./node_modules/axios/node_modules/is-buffer/index.js ***!
+  \************************************************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+/*!
+ * Determine if an object is a Buffer
+ *
+ * @author   Feross Aboukhadijeh <https://feross.org>
+ * @license  MIT
+ */
+
+module.exports = function isBuffer (obj) {
+  return obj != null && obj.constructor != null &&
+    typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
+}
 
 
 /***/ }),
@@ -6199,38 +6296,6 @@ module.exports = {
 
 /***/ }),
 
-/***/ "./node_modules/is-buffer/index.js":
-/*!*****************************************!*\
-  !*** ./node_modules/is-buffer/index.js ***!
-  \*****************************************/
-/*! no static exports found */
-/***/ (function(module, exports) {
-
-/*!
- * Determine if an object is a Buffer
- *
- * @author   Feross Aboukhadijeh <https://feross.org>
- * @license  MIT
- */
-
-// The _isBuffer check is for Safari 5-7 support, because it's missing
-// Object.prototype.constructor. Remove this eventually
-module.exports = function (obj) {
-  return obj != null && (isBuffer(obj) || isSlowBuffer(obj) || !!obj._isBuffer)
-}
-
-function isBuffer (obj) {
-  return !!obj.constructor && typeof obj.constructor.isBuffer === 'function' && obj.constructor.isBuffer(obj)
-}
-
-// For Node v0.10 support. Remove this eventually.
-function isSlowBuffer (obj) {
-  return typeof obj.readFloatLE === 'function' && typeof obj.slice === 'function' && isBuffer(obj.slice(0, 0))
-}
-
-
-/***/ }),
-
 /***/ "./node_modules/jquery/dist/jquery.js":
 /*!********************************************!*\
   !*** ./node_modules/jquery/dist/jquery.js ***!
@@ -6239,7 +6304,7 @@ function isSlowBuffer (obj) {
 /***/ (function(module, exports, __webpack_require__) {
 
 var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
- * jQuery JavaScript Library v3.3.1
+ * jQuery JavaScript Library v3.4.1
  * https://jquery.com/
  *
  * Includes Sizzle.js
@@ -6249,7 +6314,7 @@ var __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*!
  * Released under the MIT license
  * https://jquery.org/license
  *
- * Date: 2018-01-20T17:24Z
+ * Date: 2019-05-01T21:04Z
  */
 ( function( global, factory ) {
 
@@ -6331,20 +6396,33 @@ var isWindow = function isWindow( obj ) {
 	var preservedScriptAttributes = {
 		type: true,
 		src: true,
+		nonce: true,
 		noModule: true
 	};
 
-	function DOMEval( code, doc, node ) {
+	function DOMEval( code, node, doc ) {
 		doc = doc || document;
 
-		var i,
+		var i, val,
 			script = doc.createElement( "script" );
 
 		script.text = code;
 		if ( node ) {
 			for ( i in preservedScriptAttributes ) {
-				if ( node[ i ] ) {
-					script[ i ] = node[ i ];
+
+				// Support: Firefox 64+, Edge 18+
+				// Some browsers don't support the "nonce" property on scripts.
+				// On the other hand, just using `getAttribute` is not enough as
+				// the `nonce` attribute is reset to an empty string whenever it
+				// becomes browsing-context connected.
+				// See https://github.com/whatwg/html/issues/2369
+				// See https://html.spec.whatwg.org/#nonce-attributes
+				// The `node.getAttribute` check was added for the sake of
+				// `jQuery.globalEval` so that it can fake a nonce-containing node
+				// via an object.
+				val = node[ i ] || node.getAttribute && node.getAttribute( i );
+				if ( val ) {
+					script.setAttribute( i, val );
 				}
 			}
 		}
@@ -6369,7 +6447,7 @@ function toType( obj ) {
 
 
 var
-	version = "3.3.1",
+	version = "3.4.1",
 
 	// Define a local copy of jQuery
 	jQuery = function( selector, context ) {
@@ -6498,25 +6576,28 @@ jQuery.extend = jQuery.fn.extend = function() {
 
 			// Extend the base object
 			for ( name in options ) {
-				src = target[ name ];
 				copy = options[ name ];
 
+				// Prevent Object.prototype pollution
 				// Prevent never-ending loop
-				if ( target === copy ) {
+				if ( name === "__proto__" || target === copy ) {
 					continue;
 				}
 
 				// Recurse if we're merging plain objects or arrays
 				if ( deep && copy && ( jQuery.isPlainObject( copy ) ||
 					( copyIsArray = Array.isArray( copy ) ) ) ) {
+					src = target[ name ];
 
-					if ( copyIsArray ) {
-						copyIsArray = false;
-						clone = src && Array.isArray( src ) ? src : [];
-
+					// Ensure proper type for the source value
+					if ( copyIsArray && !Array.isArray( src ) ) {
+						clone = [];
+					} else if ( !copyIsArray && !jQuery.isPlainObject( src ) ) {
+						clone = {};
 					} else {
-						clone = src && jQuery.isPlainObject( src ) ? src : {};
+						clone = src;
 					}
+					copyIsArray = false;
 
 					// Never move original objects, clone them
 					target[ name ] = jQuery.extend( deep, clone, copy );
@@ -6569,9 +6650,6 @@ jQuery.extend( {
 	},
 
 	isEmptyObject: function( obj ) {
-
-		/* eslint-disable no-unused-vars */
-		// See https://github.com/eslint/eslint/issues/6125
 		var name;
 
 		for ( name in obj ) {
@@ -6581,8 +6659,8 @@ jQuery.extend( {
 	},
 
 	// Evaluates a script in a global context
-	globalEval: function( code ) {
-		DOMEval( code );
+	globalEval: function( code, options ) {
+		DOMEval( code, { nonce: options && options.nonce } );
 	},
 
 	each: function( obj, callback ) {
@@ -6738,14 +6816,14 @@ function isArrayLike( obj ) {
 }
 var Sizzle =
 /*!
- * Sizzle CSS Selector Engine v2.3.3
+ * Sizzle CSS Selector Engine v2.3.4
  * https://sizzlejs.com/
  *
- * Copyright jQuery Foundation and other contributors
+ * Copyright JS Foundation and other contributors
  * Released under the MIT license
- * http://jquery.org/license
+ * https://js.foundation/
  *
- * Date: 2016-08-08
+ * Date: 2019-04-08
  */
 (function( window ) {
 
@@ -6779,6 +6857,7 @@ var i,
 	classCache = createCache(),
 	tokenCache = createCache(),
 	compilerCache = createCache(),
+	nonnativeSelectorCache = createCache(),
 	sortOrder = function( a, b ) {
 		if ( a === b ) {
 			hasDuplicate = true;
@@ -6840,8 +6919,7 @@ var i,
 
 	rcomma = new RegExp( "^" + whitespace + "*," + whitespace + "*" ),
 	rcombinators = new RegExp( "^" + whitespace + "*([>+~]|" + whitespace + ")" + whitespace + "*" ),
-
-	rattributeQuotes = new RegExp( "=" + whitespace + "*([^\\]'\"]*?)" + whitespace + "*\\]", "g" ),
+	rdescend = new RegExp( whitespace + "|>" ),
 
 	rpseudo = new RegExp( pseudos ),
 	ridentifier = new RegExp( "^" + identifier + "$" ),
@@ -6862,6 +6940,7 @@ var i,
 			whitespace + "*((?:-\\d)?\\d*)" + whitespace + "*\\)|)(?=[^-]|$)", "i" )
 	},
 
+	rhtml = /HTML$/i,
 	rinputs = /^(?:input|select|textarea|button)$/i,
 	rheader = /^h\d$/i,
 
@@ -6916,9 +6995,9 @@ var i,
 		setDocument();
 	},
 
-	disabledAncestor = addCombinator(
+	inDisabledFieldset = addCombinator(
 		function( elem ) {
-			return elem.disabled === true && ("form" in elem || "label" in elem);
+			return elem.disabled === true && elem.nodeName.toLowerCase() === "fieldset";
 		},
 		{ dir: "parentNode", next: "legend" }
 	);
@@ -7031,18 +7110,22 @@ function Sizzle( selector, context, results, seed ) {
 
 			// Take advantage of querySelectorAll
 			if ( support.qsa &&
-				!compilerCache[ selector + " " ] &&
-				(!rbuggyQSA || !rbuggyQSA.test( selector )) ) {
+				!nonnativeSelectorCache[ selector + " " ] &&
+				(!rbuggyQSA || !rbuggyQSA.test( selector )) &&
 
-				if ( nodeType !== 1 ) {
-					newContext = context;
-					newSelector = selector;
-
-				// qSA looks outside Element context, which is not what we want
-				// Thanks to Andrew Dupont for this workaround technique
-				// Support: IE <=8
+				// Support: IE 8 only
 				// Exclude object elements
-				} else if ( context.nodeName.toLowerCase() !== "object" ) {
+				(nodeType !== 1 || context.nodeName.toLowerCase() !== "object") ) {
+
+				newSelector = selector;
+				newContext = context;
+
+				// qSA considers elements outside a scoping root when evaluating child or
+				// descendant combinators, which is not what we want.
+				// In such cases, we work around the behavior by prefixing every selector in the
+				// list with an ID selector referencing the scope context.
+				// Thanks to Andrew Dupont for this technique.
+				if ( nodeType === 1 && rdescend.test( selector ) ) {
 
 					// Capture the context ID, setting it first if necessary
 					if ( (nid = context.getAttribute( "id" )) ) {
@@ -7064,17 +7147,16 @@ function Sizzle( selector, context, results, seed ) {
 						context;
 				}
 
-				if ( newSelector ) {
-					try {
-						push.apply( results,
-							newContext.querySelectorAll( newSelector )
-						);
-						return results;
-					} catch ( qsaError ) {
-					} finally {
-						if ( nid === expando ) {
-							context.removeAttribute( "id" );
-						}
+				try {
+					push.apply( results,
+						newContext.querySelectorAll( newSelector )
+					);
+					return results;
+				} catch ( qsaError ) {
+					nonnativeSelectorCache( selector, true );
+				} finally {
+					if ( nid === expando ) {
+						context.removeAttribute( "id" );
 					}
 				}
 			}
@@ -7238,7 +7320,7 @@ function createDisabledPseudo( disabled ) {
 					// Where there is no isDisabled, check manually
 					/* jshint -W018 */
 					elem.isDisabled !== !disabled &&
-						disabledAncestor( elem ) === disabled;
+						inDisabledFieldset( elem ) === disabled;
 			}
 
 			return elem.disabled === disabled;
@@ -7295,10 +7377,13 @@ support = Sizzle.support = {};
  * @returns {Boolean} True iff elem is a non-HTML XML node
  */
 isXML = Sizzle.isXML = function( elem ) {
-	// documentElement is verified for cases where it doesn't yet exist
-	// (such as loading iframes in IE - #4833)
-	var documentElement = elem && (elem.ownerDocument || elem).documentElement;
-	return documentElement ? documentElement.nodeName !== "HTML" : false;
+	var namespace = elem.namespaceURI,
+		docElem = (elem.ownerDocument || elem).documentElement;
+
+	// Support: IE <=8
+	// Assume HTML when documentElement doesn't yet exist, such as inside loading iframes
+	// https://bugs.jquery.com/ticket/4833
+	return !rhtml.test( namespace || docElem && docElem.nodeName || "HTML" );
 };
 
 /**
@@ -7720,11 +7805,8 @@ Sizzle.matchesSelector = function( elem, expr ) {
 		setDocument( elem );
 	}
 
-	// Make sure that attribute selectors are quoted
-	expr = expr.replace( rattributeQuotes, "='$1']" );
-
 	if ( support.matchesSelector && documentIsHTML &&
-		!compilerCache[ expr + " " ] &&
+		!nonnativeSelectorCache[ expr + " " ] &&
 		( !rbuggyMatches || !rbuggyMatches.test( expr ) ) &&
 		( !rbuggyQSA     || !rbuggyQSA.test( expr ) ) ) {
 
@@ -7738,7 +7820,9 @@ Sizzle.matchesSelector = function( elem, expr ) {
 					elem.document && elem.document.nodeType !== 11 ) {
 				return ret;
 			}
-		} catch (e) {}
+		} catch (e) {
+			nonnativeSelectorCache( expr, true );
+		}
 	}
 
 	return Sizzle( expr, document, null, [ elem ] ).length > 0;
@@ -8197,7 +8281,7 @@ Expr = Sizzle.selectors = {
 		"contains": markFunction(function( text ) {
 			text = text.replace( runescape, funescape );
 			return function( elem ) {
-				return ( elem.textContent || elem.innerText || getText( elem ) ).indexOf( text ) > -1;
+				return ( elem.textContent || getText( elem ) ).indexOf( text ) > -1;
 			};
 		}),
 
@@ -8336,7 +8420,11 @@ Expr = Sizzle.selectors = {
 		}),
 
 		"lt": createPositionalPseudo(function( matchIndexes, length, argument ) {
-			var i = argument < 0 ? argument + length : argument;
+			var i = argument < 0 ?
+				argument + length :
+				argument > length ?
+					length :
+					argument;
 			for ( ; --i >= 0; ) {
 				matchIndexes.push( i );
 			}
@@ -9386,18 +9474,18 @@ jQuery.each( {
 		return siblings( elem.firstChild );
 	},
 	contents: function( elem ) {
-        if ( nodeName( elem, "iframe" ) ) {
-            return elem.contentDocument;
-        }
+		if ( typeof elem.contentDocument !== "undefined" ) {
+			return elem.contentDocument;
+		}
 
-        // Support: IE 9 - 11 only, iOS 7 only, Android Browser <=4.3 only
-        // Treat the template element as a regular one in browsers that
-        // don't support it.
-        if ( nodeName( elem, "template" ) ) {
-            elem = elem.content || elem;
-        }
+		// Support: IE 9 - 11 only, iOS 7 only, Android Browser <=4.3 only
+		// Treat the template element as a regular one in browsers that
+		// don't support it.
+		if ( nodeName( elem, "template" ) ) {
+			elem = elem.content || elem;
+		}
 
-        return jQuery.merge( [], elem.childNodes );
+		return jQuery.merge( [], elem.childNodes );
 	}
 }, function( name, fn ) {
 	jQuery.fn[ name ] = function( until, selector ) {
@@ -10706,6 +10794,26 @@ var rcssNum = new RegExp( "^(?:([+-])=|)(" + pnum + ")([a-z%]*)$", "i" );
 
 var cssExpand = [ "Top", "Right", "Bottom", "Left" ];
 
+var documentElement = document.documentElement;
+
+
+
+	var isAttached = function( elem ) {
+			return jQuery.contains( elem.ownerDocument, elem );
+		},
+		composed = { composed: true };
+
+	// Support: IE 9 - 11+, Edge 12 - 18+, iOS 10.0 - 10.2 only
+	// Check attachment across shadow DOM boundaries when possible (gh-3504)
+	// Support: iOS 10.0-10.2 only
+	// Early iOS 10 versions support `attachShadow` but not `getRootNode`,
+	// leading to errors. We need to check for `getRootNode`.
+	if ( documentElement.getRootNode ) {
+		isAttached = function( elem ) {
+			return jQuery.contains( elem.ownerDocument, elem ) ||
+				elem.getRootNode( composed ) === elem.ownerDocument;
+		};
+	}
 var isHiddenWithinTree = function( elem, el ) {
 
 		// isHiddenWithinTree might be called from jQuery#filter function;
@@ -10720,7 +10828,7 @@ var isHiddenWithinTree = function( elem, el ) {
 			// Support: Firefox <=43 - 45
 			// Disconnected elements can have computed display: none, so first confirm that elem is
 			// in the document.
-			jQuery.contains( elem.ownerDocument, elem ) &&
+			isAttached( elem ) &&
 
 			jQuery.css( elem, "display" ) === "none";
 	};
@@ -10762,7 +10870,8 @@ function adjustCSS( elem, prop, valueParts, tween ) {
 		unit = valueParts && valueParts[ 3 ] || ( jQuery.cssNumber[ prop ] ? "" : "px" ),
 
 		// Starting value computation is required for potential unit mismatches
-		initialInUnit = ( jQuery.cssNumber[ prop ] || unit !== "px" && +initial ) &&
+		initialInUnit = elem.nodeType &&
+			( jQuery.cssNumber[ prop ] || unit !== "px" && +initial ) &&
 			rcssNum.exec( jQuery.css( elem, prop ) );
 
 	if ( initialInUnit && initialInUnit[ 3 ] !== unit ) {
@@ -10909,7 +11018,7 @@ jQuery.fn.extend( {
 } );
 var rcheckableType = ( /^(?:checkbox|radio)$/i );
 
-var rtagName = ( /<([a-z][^\/\0>\x20\t\r\n\f]+)/i );
+var rtagName = ( /<([a-z][^\/\0>\x20\t\r\n\f]*)/i );
 
 var rscriptType = ( /^$|^module$|\/(?:java|ecma)script/i );
 
@@ -10981,7 +11090,7 @@ function setGlobalEval( elems, refElements ) {
 var rhtml = /<|&#?\w+;/;
 
 function buildFragment( elems, context, scripts, selection, ignored ) {
-	var elem, tmp, tag, wrap, contains, j,
+	var elem, tmp, tag, wrap, attached, j,
 		fragment = context.createDocumentFragment(),
 		nodes = [],
 		i = 0,
@@ -11045,13 +11154,13 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 			continue;
 		}
 
-		contains = jQuery.contains( elem.ownerDocument, elem );
+		attached = isAttached( elem );
 
 		// Append to fragment
 		tmp = getAll( fragment.appendChild( elem ), "script" );
 
 		// Preserve script evaluation history
-		if ( contains ) {
+		if ( attached ) {
 			setGlobalEval( tmp );
 		}
 
@@ -11094,8 +11203,6 @@ function buildFragment( elems, context, scripts, selection, ignored ) {
 	div.innerHTML = "<textarea>x</textarea>";
 	support.noCloneChecked = !!div.cloneNode( true ).lastChild.defaultValue;
 } )();
-var documentElement = document.documentElement;
-
 
 
 var
@@ -11111,8 +11218,19 @@ function returnFalse() {
 	return false;
 }
 
+// Support: IE <=9 - 11+
+// focus() and blur() are asynchronous, except when they are no-op.
+// So expect focus to be synchronous when the element is already active,
+// and blur to be synchronous when the element is not already active.
+// (focus and blur are always synchronous in other supported browsers,
+// this just defines when we can count on it).
+function expectSync( elem, type ) {
+	return ( elem === safeActiveElement() ) === ( type === "focus" );
+}
+
 // Support: IE <=9 only
-// See #13393 for more info
+// Accessing document.activeElement can throw unexpectedly
+// https://bugs.jquery.com/ticket/13393
 function safeActiveElement() {
 	try {
 		return document.activeElement;
@@ -11412,9 +11530,10 @@ jQuery.event = {
 			while ( ( handleObj = matched.handlers[ j++ ] ) &&
 				!event.isImmediatePropagationStopped() ) {
 
-				// Triggered event must either 1) have no namespace, or 2) have namespace(s)
-				// a subset or equal to those in the bound event (both can have no namespace).
-				if ( !event.rnamespace || event.rnamespace.test( handleObj.namespace ) ) {
+				// If the event is namespaced, then each handler is only invoked if it is
+				// specially universal or its namespaces are a superset of the event's.
+				if ( !event.rnamespace || handleObj.namespace === false ||
+					event.rnamespace.test( handleObj.namespace ) ) {
 
 					event.handleObj = handleObj;
 					event.data = handleObj.data;
@@ -11538,39 +11657,51 @@ jQuery.event = {
 			// Prevent triggered image.load events from bubbling to window.load
 			noBubble: true
 		},
-		focus: {
-
-			// Fire native event if possible so blur/focus sequence is correct
-			trigger: function() {
-				if ( this !== safeActiveElement() && this.focus ) {
-					this.focus();
-					return false;
-				}
-			},
-			delegateType: "focusin"
-		},
-		blur: {
-			trigger: function() {
-				if ( this === safeActiveElement() && this.blur ) {
-					this.blur();
-					return false;
-				}
-			},
-			delegateType: "focusout"
-		},
 		click: {
 
-			// For checkbox, fire native event so checked state will be right
-			trigger: function() {
-				if ( this.type === "checkbox" && this.click && nodeName( this, "input" ) ) {
-					this.click();
-					return false;
+			// Utilize native event to ensure correct state for checkable inputs
+			setup: function( data ) {
+
+				// For mutual compressibility with _default, replace `this` access with a local var.
+				// `|| data` is dead code meant only to preserve the variable through minification.
+				var el = this || data;
+
+				// Claim the first handler
+				if ( rcheckableType.test( el.type ) &&
+					el.click && nodeName( el, "input" ) ) {
+
+					// dataPriv.set( el, "click", ... )
+					leverageNative( el, "click", returnTrue );
 				}
+
+				// Return false to allow normal processing in the caller
+				return false;
+			},
+			trigger: function( data ) {
+
+				// For mutual compressibility with _default, replace `this` access with a local var.
+				// `|| data` is dead code meant only to preserve the variable through minification.
+				var el = this || data;
+
+				// Force setup before triggering a click
+				if ( rcheckableType.test( el.type ) &&
+					el.click && nodeName( el, "input" ) ) {
+
+					leverageNative( el, "click" );
+				}
+
+				// Return non-false to allow normal event-path propagation
+				return true;
 			},
 
-			// For cross-browser consistency, don't fire native .click() on links
+			// For cross-browser consistency, suppress native .click() on links
+			// Also prevent it if we're currently inside a leveraged native-event stack
 			_default: function( event ) {
-				return nodeName( event.target, "a" );
+				var target = event.target;
+				return rcheckableType.test( target.type ) &&
+					target.click && nodeName( target, "input" ) &&
+					dataPriv.get( target, "click" ) ||
+					nodeName( target, "a" );
 			}
 		},
 
@@ -11586,6 +11717,93 @@ jQuery.event = {
 		}
 	}
 };
+
+// Ensure the presence of an event listener that handles manually-triggered
+// synthetic events by interrupting progress until reinvoked in response to
+// *native* events that it fires directly, ensuring that state changes have
+// already occurred before other listeners are invoked.
+function leverageNative( el, type, expectSync ) {
+
+	// Missing expectSync indicates a trigger call, which must force setup through jQuery.event.add
+	if ( !expectSync ) {
+		if ( dataPriv.get( el, type ) === undefined ) {
+			jQuery.event.add( el, type, returnTrue );
+		}
+		return;
+	}
+
+	// Register the controller as a special universal handler for all event namespaces
+	dataPriv.set( el, type, false );
+	jQuery.event.add( el, type, {
+		namespace: false,
+		handler: function( event ) {
+			var notAsync, result,
+				saved = dataPriv.get( this, type );
+
+			if ( ( event.isTrigger & 1 ) && this[ type ] ) {
+
+				// Interrupt processing of the outer synthetic .trigger()ed event
+				// Saved data should be false in such cases, but might be a leftover capture object
+				// from an async native handler (gh-4350)
+				if ( !saved.length ) {
+
+					// Store arguments for use when handling the inner native event
+					// There will always be at least one argument (an event object), so this array
+					// will not be confused with a leftover capture object.
+					saved = slice.call( arguments );
+					dataPriv.set( this, type, saved );
+
+					// Trigger the native event and capture its result
+					// Support: IE <=9 - 11+
+					// focus() and blur() are asynchronous
+					notAsync = expectSync( this, type );
+					this[ type ]();
+					result = dataPriv.get( this, type );
+					if ( saved !== result || notAsync ) {
+						dataPriv.set( this, type, false );
+					} else {
+						result = {};
+					}
+					if ( saved !== result ) {
+
+						// Cancel the outer synthetic event
+						event.stopImmediatePropagation();
+						event.preventDefault();
+						return result.value;
+					}
+
+				// If this is an inner synthetic event for an event with a bubbling surrogate
+				// (focus or blur), assume that the surrogate already propagated from triggering the
+				// native event and prevent that from happening again here.
+				// This technically gets the ordering wrong w.r.t. to `.trigger()` (in which the
+				// bubbling surrogate propagates *after* the non-bubbling base), but that seems
+				// less bad than duplication.
+				} else if ( ( jQuery.event.special[ type ] || {} ).delegateType ) {
+					event.stopPropagation();
+				}
+
+			// If this is a native event triggered above, everything is now in order
+			// Fire an inner synthetic event with the original arguments
+			} else if ( saved.length ) {
+
+				// ...and capture the result
+				dataPriv.set( this, type, {
+					value: jQuery.event.trigger(
+
+						// Support: IE <=9 - 11+
+						// Extend with the prototype to reset the above stopImmediatePropagation()
+						jQuery.extend( saved[ 0 ], jQuery.Event.prototype ),
+						saved.slice( 1 ),
+						this
+					)
+				} );
+
+				// Abort handling of the native event
+				event.stopImmediatePropagation();
+			}
+		}
+	} );
+}
 
 jQuery.removeEvent = function( elem, type, handle ) {
 
@@ -11699,6 +11917,7 @@ jQuery.each( {
 	shiftKey: true,
 	view: true,
 	"char": true,
+	code: true,
 	charCode: true,
 	key: true,
 	keyCode: true,
@@ -11744,6 +11963,33 @@ jQuery.each( {
 		return event.which;
 	}
 }, jQuery.event.addProp );
+
+jQuery.each( { focus: "focusin", blur: "focusout" }, function( type, delegateType ) {
+	jQuery.event.special[ type ] = {
+
+		// Utilize native event if possible so blur/focus sequence is correct
+		setup: function() {
+
+			// Claim the first handler
+			// dataPriv.set( this, "focus", ... )
+			// dataPriv.set( this, "blur", ... )
+			leverageNative( this, type, expectSync );
+
+			// Return false to allow normal processing in the caller
+			return false;
+		},
+		trigger: function() {
+
+			// Force setup before trigger
+			leverageNative( this, type );
+
+			// Return non-false to allow normal event-path propagation
+			return true;
+		},
+
+		delegateType: delegateType
+	};
+} );
 
 // Create mouseenter/leave events using mouseover/out and event-time checks
 // so that event delegation works in jQuery.
@@ -11995,11 +12241,13 @@ function domManip( collection, args, callback, ignored ) {
 						if ( node.src && ( node.type || "" ).toLowerCase()  !== "module" ) {
 
 							// Optional AJAX dependency, but won't run scripts if not present
-							if ( jQuery._evalUrl ) {
-								jQuery._evalUrl( node.src );
+							if ( jQuery._evalUrl && !node.noModule ) {
+								jQuery._evalUrl( node.src, {
+									nonce: node.nonce || node.getAttribute( "nonce" )
+								} );
 							}
 						} else {
-							DOMEval( node.textContent.replace( rcleanScript, "" ), doc, node );
+							DOMEval( node.textContent.replace( rcleanScript, "" ), node, doc );
 						}
 					}
 				}
@@ -12021,7 +12269,7 @@ function remove( elem, selector, keepData ) {
 		}
 
 		if ( node.parentNode ) {
-			if ( keepData && jQuery.contains( node.ownerDocument, node ) ) {
+			if ( keepData && isAttached( node ) ) {
 				setGlobalEval( getAll( node, "script" ) );
 			}
 			node.parentNode.removeChild( node );
@@ -12039,7 +12287,7 @@ jQuery.extend( {
 	clone: function( elem, dataAndEvents, deepDataAndEvents ) {
 		var i, l, srcElements, destElements,
 			clone = elem.cloneNode( true ),
-			inPage = jQuery.contains( elem.ownerDocument, elem );
+			inPage = isAttached( elem );
 
 		// Fix IE cloning issues
 		if ( !support.noCloneChecked && ( elem.nodeType === 1 || elem.nodeType === 11 ) &&
@@ -12335,8 +12583,10 @@ var rboxStyle = new RegExp( cssExpand.join( "|" ), "i" );
 
 		// Support: IE 9 only
 		// Detect overflow:scroll screwiness (gh-3699)
+		// Support: Chrome <=64
+		// Don't get tricked when zoom affects offsetWidth (gh-4029)
 		div.style.position = "absolute";
-		scrollboxSizeVal = div.offsetWidth === 36 || "absolute";
+		scrollboxSizeVal = roundPixelMeasures( div.offsetWidth / 3 ) === 12;
 
 		documentElement.removeChild( container );
 
@@ -12407,7 +12657,7 @@ function curCSS( elem, name, computed ) {
 	if ( computed ) {
 		ret = computed.getPropertyValue( name ) || computed[ name ];
 
-		if ( ret === "" && !jQuery.contains( elem.ownerDocument, elem ) ) {
+		if ( ret === "" && !isAttached( elem ) ) {
 			ret = jQuery.style( elem, name );
 		}
 
@@ -12463,29 +12713,12 @@ function addGetHookIf( conditionFn, hookFn ) {
 }
 
 
-var
+var cssPrefixes = [ "Webkit", "Moz", "ms" ],
+	emptyStyle = document.createElement( "div" ).style,
+	vendorProps = {};
 
-	// Swappable if display is none or starts with table
-	// except "table", "table-cell", or "table-caption"
-	// See here for display values: https://developer.mozilla.org/en-US/docs/CSS/display
-	rdisplayswap = /^(none|table(?!-c[ea]).+)/,
-	rcustomProp = /^--/,
-	cssShow = { position: "absolute", visibility: "hidden", display: "block" },
-	cssNormalTransform = {
-		letterSpacing: "0",
-		fontWeight: "400"
-	},
-
-	cssPrefixes = [ "Webkit", "Moz", "ms" ],
-	emptyStyle = document.createElement( "div" ).style;
-
-// Return a css property mapped to a potentially vendor prefixed property
+// Return a vendor-prefixed property or undefined
 function vendorPropName( name ) {
-
-	// Shortcut for names that are not vendor prefixed
-	if ( name in emptyStyle ) {
-		return name;
-	}
 
 	// Check for vendor prefixed names
 	var capName = name[ 0 ].toUpperCase() + name.slice( 1 ),
@@ -12499,15 +12732,32 @@ function vendorPropName( name ) {
 	}
 }
 
-// Return a property mapped along what jQuery.cssProps suggests or to
-// a vendor prefixed property.
+// Return a potentially-mapped jQuery.cssProps or vendor prefixed property
 function finalPropName( name ) {
-	var ret = jQuery.cssProps[ name ];
-	if ( !ret ) {
-		ret = jQuery.cssProps[ name ] = vendorPropName( name ) || name;
+	var final = jQuery.cssProps[ name ] || vendorProps[ name ];
+
+	if ( final ) {
+		return final;
 	}
-	return ret;
+	if ( name in emptyStyle ) {
+		return name;
+	}
+	return vendorProps[ name ] = vendorPropName( name ) || name;
 }
+
+
+var
+
+	// Swappable if display is none or starts with table
+	// except "table", "table-cell", or "table-caption"
+	// See here for display values: https://developer.mozilla.org/en-US/docs/CSS/display
+	rdisplayswap = /^(none|table(?!-c[ea]).+)/,
+	rcustomProp = /^--/,
+	cssShow = { position: "absolute", visibility: "hidden", display: "block" },
+	cssNormalTransform = {
+		letterSpacing: "0",
+		fontWeight: "400"
+	};
 
 function setPositiveNumber( elem, value, subtract ) {
 
@@ -12580,7 +12830,10 @@ function boxModelAdjustment( elem, dimension, box, isBorderBox, styles, computed
 			delta -
 			extra -
 			0.5
-		) );
+
+		// If offsetWidth/offsetHeight is unknown, then we can't determine content-box scroll gutter
+		// Use an explicit zero to avoid NaN (gh-3964)
+		) ) || 0;
 	}
 
 	return delta;
@@ -12590,9 +12843,16 @@ function getWidthOrHeight( elem, dimension, extra ) {
 
 	// Start with computed style
 	var styles = getStyles( elem ),
+
+		// To avoid forcing a reflow, only fetch boxSizing if we need it (gh-4322).
+		// Fake content-box until we know it's needed to know the true value.
+		boxSizingNeeded = !support.boxSizingReliable() || extra,
+		isBorderBox = boxSizingNeeded &&
+			jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+		valueIsBorderBox = isBorderBox,
+
 		val = curCSS( elem, dimension, styles ),
-		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
-		valueIsBorderBox = isBorderBox;
+		offsetProp = "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 );
 
 	// Support: Firefox <=54
 	// Return a confounding non-pixel value or feign ignorance, as appropriate.
@@ -12603,22 +12863,29 @@ function getWidthOrHeight( elem, dimension, extra ) {
 		val = "auto";
 	}
 
-	// Check for style in case a browser which returns unreliable values
-	// for getComputedStyle silently falls back to the reliable elem.style
-	valueIsBorderBox = valueIsBorderBox &&
-		( support.boxSizingReliable() || val === elem.style[ dimension ] );
 
 	// Fall back to offsetWidth/offsetHeight when value is "auto"
 	// This happens for inline elements with no explicit setting (gh-3571)
 	// Support: Android <=4.1 - 4.3 only
 	// Also use offsetWidth/offsetHeight for misreported inline dimensions (gh-3602)
-	if ( val === "auto" ||
-		!parseFloat( val ) && jQuery.css( elem, "display", false, styles ) === "inline" ) {
+	// Support: IE 9-11 only
+	// Also use offsetWidth/offsetHeight for when box sizing is unreliable
+	// We use getClientRects() to check for hidden/disconnected.
+	// In those cases, the computed value can be trusted to be border-box
+	if ( ( !support.boxSizingReliable() && isBorderBox ||
+		val === "auto" ||
+		!parseFloat( val ) && jQuery.css( elem, "display", false, styles ) === "inline" ) &&
+		elem.getClientRects().length ) {
 
-		val = elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ];
+		isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box";
 
-		// offsetWidth/offsetHeight provide border-box values
-		valueIsBorderBox = true;
+		// Where available, offsetWidth/offsetHeight approximate border box dimensions.
+		// Where not available (e.g., SVG), assume unreliable box-sizing and interpret the
+		// retrieved value as a content box dimension.
+		valueIsBorderBox = offsetProp in elem;
+		if ( valueIsBorderBox ) {
+			val = elem[ offsetProp ];
+		}
 	}
 
 	// Normalize "" and auto
@@ -12664,6 +12931,13 @@ jQuery.extend( {
 		"flexGrow": true,
 		"flexShrink": true,
 		"fontWeight": true,
+		"gridArea": true,
+		"gridColumn": true,
+		"gridColumnEnd": true,
+		"gridColumnStart": true,
+		"gridRow": true,
+		"gridRowEnd": true,
+		"gridRowStart": true,
 		"lineHeight": true,
 		"opacity": true,
 		"order": true,
@@ -12719,7 +12993,9 @@ jQuery.extend( {
 			}
 
 			// If a number was passed in, add the unit (except for certain CSS properties)
-			if ( type === "number" ) {
+			// The isCustomProp check can be removed in jQuery 4.0 when we only auto-append
+			// "px" to a few hardcoded values.
+			if ( type === "number" && !isCustomProp ) {
 				value += ret && ret[ 3 ] || ( jQuery.cssNumber[ origName ] ? "" : "px" );
 			}
 
@@ -12819,18 +13095,29 @@ jQuery.each( [ "height", "width" ], function( i, dimension ) {
 		set: function( elem, value, extra ) {
 			var matches,
 				styles = getStyles( elem ),
-				isBorderBox = jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
-				subtract = extra && boxModelAdjustment(
-					elem,
-					dimension,
-					extra,
-					isBorderBox,
-					styles
-				);
+
+				// Only read styles.position if the test has a chance to fail
+				// to avoid forcing a reflow.
+				scrollboxSizeBuggy = !support.scrollboxSize() &&
+					styles.position === "absolute",
+
+				// To avoid forcing a reflow, only fetch boxSizing if we need it (gh-3991)
+				boxSizingNeeded = scrollboxSizeBuggy || extra,
+				isBorderBox = boxSizingNeeded &&
+					jQuery.css( elem, "boxSizing", false, styles ) === "border-box",
+				subtract = extra ?
+					boxModelAdjustment(
+						elem,
+						dimension,
+						extra,
+						isBorderBox,
+						styles
+					) :
+					0;
 
 			// Account for unreliable border-box dimensions by comparing offset* to computed and
 			// faking a content-box to get border and padding (gh-3699)
-			if ( isBorderBox && support.scrollboxSize() === styles.position ) {
+			if ( isBorderBox && scrollboxSizeBuggy ) {
 				subtract -= Math.ceil(
 					elem[ "offset" + dimension[ 0 ].toUpperCase() + dimension.slice( 1 ) ] -
 					parseFloat( styles[ dimension ] ) -
@@ -12998,9 +13285,9 @@ Tween.propHooks = {
 			// Use .style if available and use plain properties where available.
 			if ( jQuery.fx.step[ tween.prop ] ) {
 				jQuery.fx.step[ tween.prop ]( tween );
-			} else if ( tween.elem.nodeType === 1 &&
-				( tween.elem.style[ jQuery.cssProps[ tween.prop ] ] != null ||
-					jQuery.cssHooks[ tween.prop ] ) ) {
+			} else if ( tween.elem.nodeType === 1 && (
+					jQuery.cssHooks[ tween.prop ] ||
+					tween.elem.style[ finalPropName( tween.prop ) ] != null ) ) {
 				jQuery.style( tween.elem, tween.prop, tween.now + tween.unit );
 			} else {
 				tween.elem[ tween.prop ] = tween.now;
@@ -14707,6 +14994,10 @@ jQuery.param = function( a, traditional ) {
 				encodeURIComponent( value == null ? "" : value );
 		};
 
+	if ( a == null ) {
+		return "";
+	}
+
 	// If an array was passed in, assume that it is an array of form elements.
 	if ( Array.isArray( a ) || ( a.jquery && !jQuery.isPlainObject( a ) ) ) {
 
@@ -15209,12 +15500,14 @@ jQuery.extend( {
 						if ( !responseHeaders ) {
 							responseHeaders = {};
 							while ( ( match = rheaders.exec( responseHeadersString ) ) ) {
-								responseHeaders[ match[ 1 ].toLowerCase() ] = match[ 2 ];
+								responseHeaders[ match[ 1 ].toLowerCase() + " " ] =
+									( responseHeaders[ match[ 1 ].toLowerCase() + " " ] || [] )
+										.concat( match[ 2 ] );
 							}
 						}
-						match = responseHeaders[ key.toLowerCase() ];
+						match = responseHeaders[ key.toLowerCase() + " " ];
 					}
-					return match == null ? null : match;
+					return match == null ? null : match.join( ", " );
 				},
 
 				// Raw string
@@ -15603,7 +15896,7 @@ jQuery.each( [ "get", "post" ], function( i, method ) {
 } );
 
 
-jQuery._evalUrl = function( url ) {
+jQuery._evalUrl = function( url, options ) {
 	return jQuery.ajax( {
 		url: url,
 
@@ -15613,7 +15906,16 @@ jQuery._evalUrl = function( url ) {
 		cache: true,
 		async: false,
 		global: false,
-		"throws": true
+
+		// Only evaluate the response if it is successful (gh-4126)
+		// dataFilter is not invoked for failure responses, so using it instead
+		// of the default converter is kludgy but it works.
+		converters: {
+			"text script": function() {}
+		},
+		dataFilter: function( response ) {
+			jQuery.globalEval( response, options );
+		}
 	} );
 };
 
@@ -15896,24 +16198,21 @@ jQuery.ajaxPrefilter( "script", function( s ) {
 // Bind script tag hack transport
 jQuery.ajaxTransport( "script", function( s ) {
 
-	// This transport only deals with cross domain requests
-	if ( s.crossDomain ) {
+	// This transport only deals with cross domain or forced-by-attrs requests
+	if ( s.crossDomain || s.scriptAttrs ) {
 		var script, callback;
 		return {
 			send: function( _, complete ) {
-				script = jQuery( "<script>" ).prop( {
-					charset: s.scriptCharset,
-					src: s.url
-				} ).on(
-					"load error",
-					callback = function( evt ) {
+				script = jQuery( "<script>" )
+					.attr( s.scriptAttrs || {} )
+					.prop( { charset: s.scriptCharset, src: s.url } )
+					.on( "load error", callback = function( evt ) {
 						script.remove();
 						callback = null;
 						if ( evt ) {
 							complete( evt.type === "error" ? 404 : 200, evt.type );
 						}
-					}
-				);
+					} );
 
 				// Use native DOM manipulation to avoid our domManip AJAX trickery
 				document.head.appendChild( script[ 0 ] );
@@ -48823,6 +49122,811 @@ window.Vue = __webpack_require__(/*! vue */ "./node_modules/vue/dist/vue.common.
 
 __webpack_require__(/*! ./plot */ "./resources/js/plot.js");
 
+__webpack_require__(/*! ./bootstrap-slider */ "./resources/js/bootstrap-slider.js");
+
+/***/ }),
+
+/***/ "./resources/js/bootstrap-slider.js":
+/*!******************************************!*\
+  !*** ./resources/js/bootstrap-slider.js ***!
+  \******************************************/
+/*! no static exports found */
+/***/ (function(module, exports, __webpack_require__) {
+
+"use strict";
+var __WEBPACK_AMD_DEFINE_FACTORY__, __WEBPACK_AMD_DEFINE_ARRAY__, __WEBPACK_AMD_DEFINE_RESULT__;/*! =======================================================
+                      VERSION  10.6.1              
+========================================================= */
+
+
+function _typeof2(obj) { if (typeof Symbol === "function" && typeof Symbol.iterator === "symbol") { _typeof2 = function _typeof2(obj) { return typeof obj; }; } else { _typeof2 = function _typeof2(obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol && obj !== Symbol.prototype ? "symbol" : typeof obj; }; } return _typeof2(obj); }
+
+var _typeof = "function" == typeof Symbol && "symbol" == _typeof2(Symbol.iterator) ? function (a) {
+  return _typeof2(a);
+} : function (a) {
+  return a && "function" == typeof Symbol && a.constructor === Symbol && a !== Symbol.prototype ? "symbol" : _typeof2(a);
+},
+    windowIsDefined = "object" === ("undefined" == typeof window ? "undefined" : _typeof(window));
+
+!function (a) {
+  if (true) !(__WEBPACK_AMD_DEFINE_ARRAY__ = [__webpack_require__(/*! jquery */ "./node_modules/jquery/dist/jquery.js")], __WEBPACK_AMD_DEFINE_FACTORY__ = (a),
+				__WEBPACK_AMD_DEFINE_RESULT__ = (typeof __WEBPACK_AMD_DEFINE_FACTORY__ === 'function' ?
+				(__WEBPACK_AMD_DEFINE_FACTORY__.apply(exports, __WEBPACK_AMD_DEFINE_ARRAY__)) : __WEBPACK_AMD_DEFINE_FACTORY__),
+				__WEBPACK_AMD_DEFINE_RESULT__ !== undefined && (module.exports = __WEBPACK_AMD_DEFINE_RESULT__));else { var b; }
+}(function (a) {
+  var b = "slider",
+      c = "bootstrapSlider";
+  windowIsDefined && !window.console && (window.console = {}), windowIsDefined && !window.console.log && (window.console.log = function () {}), windowIsDefined && !window.console.warn && (window.console.warn = function () {});
+  var d;
+  return function (a) {
+    function b() {}
+
+    function c(a) {
+      function c(b) {
+        b.prototype.option || (b.prototype.option = function (b) {
+          a.isPlainObject(b) && (this.options = a.extend(!0, this.options, b));
+        });
+      }
+
+      function e(b, c) {
+        a.fn[b] = function (e) {
+          if ("string" == typeof e) {
+            for (var g = d.call(arguments, 1), h = 0, i = this.length; i > h; h++) {
+              var j = this[h],
+                  k = a.data(j, b);
+              if (k) {
+                if (a.isFunction(k[e]) && "_" !== e.charAt(0)) {
+                  var l = k[e].apply(k, g);
+                  if (void 0 !== l && l !== k) return l;
+                } else f("no such method '" + e + "' for " + b + " instance");
+              } else f("cannot call methods on " + b + " prior to initialization; attempted to call '" + e + "'");
+            }
+
+            return this;
+          }
+
+          var m = this.map(function () {
+            var d = a.data(this, b);
+            return d ? (d.option(e), d._init()) : (d = new c(this, e), a.data(this, b, d)), a(this);
+          });
+          return !m || m.length > 1 ? m : m[0];
+        };
+      }
+
+      if (a) {
+        var f = "undefined" == typeof console ? b : function (a) {
+          console.error(a);
+        };
+        return a.bridget = function (a, b) {
+          c(b), e(a, b);
+        }, a.bridget;
+      }
+    }
+
+    var d = Array.prototype.slice;
+    c(a);
+  }(a), function (a) {
+    function e(b, c) {
+      function d(a, b) {
+        var c = "data-slider-" + b.replace(/_/g, "-"),
+            d = a.getAttribute(c);
+
+        try {
+          return JSON.parse(d);
+        } catch (e) {
+          return d;
+        }
+      }
+
+      this._state = {
+        value: null,
+        enabled: null,
+        offset: null,
+        size: null,
+        percentage: null,
+        inDrag: !1,
+        over: !1,
+        tickIndex: null
+      }, this.ticksCallbackMap = {}, this.handleCallbackMap = {}, "string" == typeof b ? this.element = document.querySelector(b) : b instanceof HTMLElement && (this.element = b), c = c ? c : {};
+
+      for (var e = Object.keys(this.defaultOptions), f = c.hasOwnProperty("min"), g = c.hasOwnProperty("max"), i = 0; i < e.length; i++) {
+        var j = e[i],
+            k = c[j];
+        k = "undefined" != typeof k ? k : d(this.element, j), k = null !== k ? k : this.defaultOptions[j], this.options || (this.options = {}), this.options[j] = k;
+      }
+
+      if (this.ticksAreValid = Array.isArray(this.options.ticks) && this.options.ticks.length > 0, this.ticksAreValid || (this.options.lock_to_ticks = !1), "auto" === this.options.rtl) {
+        var l = window.getComputedStyle(this.element);
+        null != l ? this.options.rtl = "rtl" === l.direction : this.options.rtl = "rtl" === this.element.style.direction;
+      }
+
+      "vertical" !== this.options.orientation || "top" !== this.options.tooltip_position && "bottom" !== this.options.tooltip_position ? "horizontal" !== this.options.orientation || "left" !== this.options.tooltip_position && "right" !== this.options.tooltip_position || (this.options.tooltip_position = "top") : this.options.rtl ? this.options.tooltip_position = "left" : this.options.tooltip_position = "right";
+      var m,
+          n,
+          o,
+          p,
+          q,
+          r = this.element.style.width,
+          s = !1,
+          t = this.element.parentNode;
+      if (this.sliderElem) s = !0;else {
+        this.sliderElem = document.createElement("div"), this.sliderElem.className = "slider";
+        var u = document.createElement("div");
+        u.className = "slider-track", n = document.createElement("div"), n.className = "slider-track-low", m = document.createElement("div"), m.className = "slider-selection", o = document.createElement("div"), o.className = "slider-track-high", p = document.createElement("div"), p.className = "slider-handle min-slider-handle", p.setAttribute("role", "slider"), p.setAttribute("aria-valuemin", this.options.min), p.setAttribute("aria-valuemax", this.options.max), q = document.createElement("div"), q.className = "slider-handle max-slider-handle", q.setAttribute("role", "slider"), q.setAttribute("aria-valuemin", this.options.min), q.setAttribute("aria-valuemax", this.options.max), u.appendChild(n), u.appendChild(m), u.appendChild(o), this.rangeHighlightElements = [];
+        var v = this.options.rangeHighlights;
+        if (Array.isArray(v) && v.length > 0) for (var w = 0; w < v.length; w++) {
+          var x = document.createElement("div"),
+              y = v[w]["class"] || "";
+          x.className = "slider-rangeHighlight slider-selection " + y, this.rangeHighlightElements.push(x), u.appendChild(x);
+        }
+        var z = Array.isArray(this.options.labelledby);
+
+        if (z && this.options.labelledby[0] && p.setAttribute("aria-labelledby", this.options.labelledby[0]), z && this.options.labelledby[1] && q.setAttribute("aria-labelledby", this.options.labelledby[1]), !z && this.options.labelledby && (p.setAttribute("aria-labelledby", this.options.labelledby), q.setAttribute("aria-labelledby", this.options.labelledby)), this.ticks = [], Array.isArray(this.options.ticks) && this.options.ticks.length > 0) {
+          for (this.ticksContainer = document.createElement("div"), this.ticksContainer.className = "slider-tick-container", i = 0; i < this.options.ticks.length; i++) {
+            var A = document.createElement("div");
+
+            if (A.className = "slider-tick", this.options.ticks_tooltip) {
+              var B = this._addTickListener(),
+                  C = B.addMouseEnter(this, A, i),
+                  D = B.addMouseLeave(this, A);
+
+              this.ticksCallbackMap[i] = {
+                mouseEnter: C,
+                mouseLeave: D
+              };
+            }
+
+            this.ticks.push(A), this.ticksContainer.appendChild(A);
+          }
+
+          m.className += " tick-slider-selection";
+        }
+
+        if (this.tickLabels = [], Array.isArray(this.options.ticks_labels) && this.options.ticks_labels.length > 0) for (this.tickLabelContainer = document.createElement("div"), this.tickLabelContainer.className = "slider-tick-label-container", i = 0; i < this.options.ticks_labels.length; i++) {
+          var E = document.createElement("div"),
+              F = 0 === this.options.ticks_positions.length,
+              G = this.options.reversed && F ? this.options.ticks_labels.length - (i + 1) : i;
+          E.className = "slider-tick-label", E.innerHTML = this.options.ticks_labels[G], this.tickLabels.push(E), this.tickLabelContainer.appendChild(E);
+        }
+
+        var H = function H(a) {
+          var b = document.createElement("div");
+          b.className = "tooltip-arrow";
+          var c = document.createElement("div");
+          c.className = "tooltip-inner", a.appendChild(b), a.appendChild(c);
+        },
+            I = document.createElement("div");
+
+        I.className = "tooltip tooltip-main", I.setAttribute("role", "presentation"), H(I);
+        var J = document.createElement("div");
+        J.className = "tooltip tooltip-min", J.setAttribute("role", "presentation"), H(J);
+        var K = document.createElement("div");
+        K.className = "tooltip tooltip-max", K.setAttribute("role", "presentation"), H(K), this.sliderElem.appendChild(u), this.sliderElem.appendChild(I), this.sliderElem.appendChild(J), this.sliderElem.appendChild(K), this.tickLabelContainer && this.sliderElem.appendChild(this.tickLabelContainer), this.ticksContainer && this.sliderElem.appendChild(this.ticksContainer), this.sliderElem.appendChild(p), this.sliderElem.appendChild(q), t.insertBefore(this.sliderElem, this.element), this.element.style.display = "none";
+      }
+      if (a && (this.$element = a(this.element), this.$sliderElem = a(this.sliderElem)), this.eventToCallbackMap = {}, this.sliderElem.id = this.options.id, this.touchCapable = "ontouchstart" in window || window.DocumentTouch && document instanceof window.DocumentTouch, this.touchX = 0, this.touchY = 0, this.tooltip = this.sliderElem.querySelector(".tooltip-main"), this.tooltipInner = this.tooltip.querySelector(".tooltip-inner"), this.tooltip_min = this.sliderElem.querySelector(".tooltip-min"), this.tooltipInner_min = this.tooltip_min.querySelector(".tooltip-inner"), this.tooltip_max = this.sliderElem.querySelector(".tooltip-max"), this.tooltipInner_max = this.tooltip_max.querySelector(".tooltip-inner"), h[this.options.scale] && (this.options.scale = h[this.options.scale]), s === !0 && (this._removeClass(this.sliderElem, "slider-horizontal"), this._removeClass(this.sliderElem, "slider-vertical"), this._removeClass(this.sliderElem, "slider-rtl"), this._removeClass(this.tooltip, "hide"), this._removeClass(this.tooltip_min, "hide"), this._removeClass(this.tooltip_max, "hide"), ["left", "right", "top", "width", "height"].forEach(function (a) {
+        this._removeProperty(this.trackLow, a), this._removeProperty(this.trackSelection, a), this._removeProperty(this.trackHigh, a);
+      }, this), [this.handle1, this.handle2].forEach(function (a) {
+        this._removeProperty(a, "left"), this._removeProperty(a, "right"), this._removeProperty(a, "top");
+      }, this), [this.tooltip, this.tooltip_min, this.tooltip_max].forEach(function (a) {
+        this._removeProperty(a, "left"), this._removeProperty(a, "right"), this._removeProperty(a, "top"), this._removeClass(a, "right"), this._removeClass(a, "left"), this._removeClass(a, "top");
+      }, this)), "vertical" === this.options.orientation ? (this._addClass(this.sliderElem, "slider-vertical"), this.stylePos = "top", this.mousePos = "pageY", this.sizePos = "offsetHeight") : (this._addClass(this.sliderElem, "slider-horizontal"), this.sliderElem.style.width = r, this.options.orientation = "horizontal", this.options.rtl ? this.stylePos = "right" : this.stylePos = "left", this.mousePos = "clientX", this.sizePos = "offsetWidth"), this.options.rtl && this._addClass(this.sliderElem, "slider-rtl"), this._setTooltipPosition(), Array.isArray(this.options.ticks) && this.options.ticks.length > 0 && (g || (this.options.max = Math.max.apply(Math, this.options.ticks)), f || (this.options.min = Math.min.apply(Math, this.options.ticks))), Array.isArray(this.options.value) ? (this.options.range = !0, this._state.value = this.options.value) : this.options.range ? this._state.value = [this.options.value, this.options.max] : this._state.value = this.options.value, this.trackLow = n || this.trackLow, this.trackSelection = m || this.trackSelection, this.trackHigh = o || this.trackHigh, "none" === this.options.selection ? (this._addClass(this.trackLow, "hide"), this._addClass(this.trackSelection, "hide"), this._addClass(this.trackHigh, "hide")) : ("after" === this.options.selection || "before" === this.options.selection) && (this._removeClass(this.trackLow, "hide"), this._removeClass(this.trackSelection, "hide"), this._removeClass(this.trackHigh, "hide")), this.handle1 = p || this.handle1, this.handle2 = q || this.handle2, s === !0) for (this._removeClass(this.handle1, "round triangle"), this._removeClass(this.handle2, "round triangle hide"), i = 0; i < this.ticks.length; i++) {
+        this._removeClass(this.ticks[i], "round triangle hide");
+      }
+      var L = ["round", "triangle", "custom"],
+          M = -1 !== L.indexOf(this.options.handle);
+      if (M) for (this._addClass(this.handle1, this.options.handle), this._addClass(this.handle2, this.options.handle), i = 0; i < this.ticks.length; i++) {
+        this._addClass(this.ticks[i], this.options.handle);
+      }
+      if (this._state.offset = this._offset(this.sliderElem), this._state.size = this.sliderElem[this.sizePos], this.setValue(this._state.value), this.handle1Keydown = this._keydown.bind(this, 0), this.handle1.addEventListener("keydown", this.handle1Keydown, !1), this.handle2Keydown = this._keydown.bind(this, 1), this.handle2.addEventListener("keydown", this.handle2Keydown, !1), this.mousedown = this._mousedown.bind(this), this.touchstart = this._touchstart.bind(this), this.touchmove = this._touchmove.bind(this), this.touchCapable && (this.sliderElem.addEventListener("touchstart", this.touchstart, !1), this.sliderElem.addEventListener("touchmove", this.touchmove, !1)), this.sliderElem.addEventListener("mousedown", this.mousedown, !1), this.resize = this._resize.bind(this), window.addEventListener("resize", this.resize, !1), "hide" === this.options.tooltip) this._addClass(this.tooltip, "hide"), this._addClass(this.tooltip_min, "hide"), this._addClass(this.tooltip_max, "hide");else if ("always" === this.options.tooltip) this._showTooltip(), this._alwaysShowTooltip = !0;else {
+        if (this.showTooltip = this._showTooltip.bind(this), this.hideTooltip = this._hideTooltip.bind(this), this.options.ticks_tooltip) {
+          var N = this._addTickListener(),
+              O = N.addMouseEnter(this, this.handle1),
+              P = N.addMouseLeave(this, this.handle1);
+
+          this.handleCallbackMap.handle1 = {
+            mouseEnter: O,
+            mouseLeave: P
+          }, O = N.addMouseEnter(this, this.handle2), P = N.addMouseLeave(this, this.handle2), this.handleCallbackMap.handle2 = {
+            mouseEnter: O,
+            mouseLeave: P
+          };
+        } else this.sliderElem.addEventListener("mouseenter", this.showTooltip, !1), this.sliderElem.addEventListener("mouseleave", this.hideTooltip, !1), this.touchCapable && (this.sliderElem.addEventListener("touchstart", this.showTooltip, !1), this.sliderElem.addEventListener("touchmove", this.showTooltip, !1), this.sliderElem.addEventListener("touchend", this.hideTooltip, !1));
+
+        this.handle1.addEventListener("focus", this.showTooltip, !1), this.handle1.addEventListener("blur", this.hideTooltip, !1), this.handle2.addEventListener("focus", this.showTooltip, !1), this.handle2.addEventListener("blur", this.hideTooltip, !1), this.touchCapable && (this.handle1.addEventListener("touchstart", this.showTooltip, !1), this.handle1.addEventListener("touchmove", this.showTooltip, !1), this.handle1.addEventListener("touchend", this.hideTooltip, !1), this.handle2.addEventListener("touchstart", this.showTooltip, !1), this.handle2.addEventListener("touchmove", this.showTooltip, !1), this.handle2.addEventListener("touchend", this.hideTooltip, !1));
+      }
+      this.options.enabled ? this.enable() : this.disable();
+    }
+
+    var f = void 0,
+        g = {
+      formatInvalidInputErrorMsg: function formatInvalidInputErrorMsg(a) {
+        return "Invalid input value '" + a + "' passed in";
+      },
+      callingContextNotSliderInstance: "Calling context element does not have instance of Slider bound to it. Check your code to make sure the JQuery object returned from the call to the slider() initializer is calling the method"
+    },
+        h = {
+      linear: {
+        getValue: function getValue(a, b) {
+          return a < b.min ? b.min : a > b.max ? b.max : a;
+        },
+        toValue: function toValue(a) {
+          var b = a / 100 * (this.options.max - this.options.min),
+              c = !0;
+
+          if (this.options.ticks_positions.length > 0) {
+            for (var d, e, f, g = 0, i = 1; i < this.options.ticks_positions.length; i++) {
+              if (a <= this.options.ticks_positions[i]) {
+                d = this.options.ticks[i - 1], f = this.options.ticks_positions[i - 1], e = this.options.ticks[i], g = this.options.ticks_positions[i];
+                break;
+              }
+            }
+
+            var j = (a - f) / (g - f);
+            b = d + j * (e - d), c = !1;
+          }
+
+          var k = c ? this.options.min : 0,
+              l = k + Math.round(b / this.options.step) * this.options.step;
+          return h.linear.getValue(l, this.options);
+        },
+        toPercentage: function toPercentage(a) {
+          if (this.options.max === this.options.min) return 0;
+
+          if (this.options.ticks_positions.length > 0) {
+            for (var b, c, d, e = 0, f = 0; f < this.options.ticks.length; f++) {
+              if (a <= this.options.ticks[f]) {
+                b = f > 0 ? this.options.ticks[f - 1] : 0, d = f > 0 ? this.options.ticks_positions[f - 1] : 0, c = this.options.ticks[f], e = this.options.ticks_positions[f];
+                break;
+              }
+            }
+
+            if (f > 0) {
+              var g = (a - b) / (c - b);
+              return d + g * (e - d);
+            }
+          }
+
+          return 100 * (a - this.options.min) / (this.options.max - this.options.min);
+        }
+      },
+      logarithmic: {
+        toValue: function toValue(a) {
+          var b = 1 - this.options.min,
+              c = Math.log(this.options.min + b),
+              d = Math.log(this.options.max + b),
+              e = Math.exp(c + (d - c) * a / 100) - b;
+          return Math.round(e) === d ? d : (e = this.options.min + Math.round((e - this.options.min) / this.options.step) * this.options.step, h.linear.getValue(e, this.options));
+        },
+        toPercentage: function toPercentage(a) {
+          if (this.options.max === this.options.min) return 0;
+          var b = 1 - this.options.min,
+              c = Math.log(this.options.max + b),
+              d = Math.log(this.options.min + b),
+              e = Math.log(a + b);
+          return 100 * (e - d) / (c - d);
+        }
+      }
+    };
+    d = function d(a, b) {
+      return e.call(this, a, b), this;
+    }, d.prototype = {
+      _init: function _init() {},
+      constructor: d,
+      defaultOptions: {
+        id: "",
+        min: 0,
+        max: 10,
+        step: 1,
+        precision: 0,
+        orientation: "horizontal",
+        value: 5,
+        range: !1,
+        selection: "before",
+        tooltip: "show",
+        tooltip_split: !1,
+        lock_to_ticks: !1,
+        handle: "round",
+        reversed: !1,
+        rtl: "auto",
+        enabled: !0,
+        formatter: function formatter(a) {
+          return Array.isArray(a) ? a[0] + " : " + a[1] : a;
+        },
+        natural_arrow_keys: !1,
+        ticks: [],
+        ticks_positions: [],
+        ticks_labels: [],
+        ticks_snap_bounds: 0,
+        ticks_tooltip: !1,
+        scale: "linear",
+        focus: !1,
+        tooltip_position: null,
+        labelledby: null,
+        rangeHighlights: []
+      },
+      getElement: function getElement() {
+        return this.sliderElem;
+      },
+      getValue: function getValue() {
+        return this.options.range ? this._state.value : this._state.value[0];
+      },
+      setValue: function setValue(a, b, c) {
+        a || (a = 0);
+        var d = this.getValue();
+        this._state.value = this._validateInputValue(a);
+
+        var e = this._applyPrecision.bind(this);
+
+        this.options.range ? (this._state.value[0] = e(this._state.value[0]), this._state.value[1] = e(this._state.value[1]), this.ticksAreValid && this.options.lock_to_ticks && (this._state.value[0] = this.options.ticks[this._getClosestTickIndex(this._state.value[0])], this._state.value[1] = this.options.ticks[this._getClosestTickIndex(this._state.value[1])]), this._state.value[0] = Math.max(this.options.min, Math.min(this.options.max, this._state.value[0])), this._state.value[1] = Math.max(this.options.min, Math.min(this.options.max, this._state.value[1]))) : (this._state.value = e(this._state.value), this.ticksAreValid && this.options.lock_to_ticks && (this._state.value = this.options.ticks[this._getClosestTickIndex(this._state.value)]), this._state.value = [Math.max(this.options.min, Math.min(this.options.max, this._state.value))], this._addClass(this.handle2, "hide"), "after" === this.options.selection ? this._state.value[1] = this.options.max : this._state.value[1] = this.options.min), this._setTickIndex(), this.options.max > this.options.min ? this._state.percentage = [this._toPercentage(this._state.value[0]), this._toPercentage(this._state.value[1]), 100 * this.options.step / (this.options.max - this.options.min)] : this._state.percentage = [0, 0, 100], this._layout();
+        var f = this.options.range ? this._state.value : this._state.value[0];
+        this._setDataVal(f), b === !0 && this._trigger("slide", f);
+        var g = !1;
+        return g = Array.isArray(f) ? d[0] !== f[0] || d[1] !== f[1] : d !== f, g && c === !0 && this._trigger("change", {
+          oldValue: d,
+          newValue: f
+        }), this;
+      },
+      destroy: function destroy() {
+        this._removeSliderEventHandlers(), this.sliderElem.parentNode.removeChild(this.sliderElem), this.element.style.display = "", this._cleanUpEventCallbacksMap(), this.element.removeAttribute("data"), a && (this._unbindJQueryEventHandlers(), f === b && this.$element.removeData(f), this.$element.removeData(c));
+      },
+      disable: function disable() {
+        return this._state.enabled = !1, this.handle1.removeAttribute("tabindex"), this.handle2.removeAttribute("tabindex"), this._addClass(this.sliderElem, "slider-disabled"), this._trigger("slideDisabled"), this;
+      },
+      enable: function enable() {
+        return this._state.enabled = !0, this.handle1.setAttribute("tabindex", 0), this.handle2.setAttribute("tabindex", 0), this._removeClass(this.sliderElem, "slider-disabled"), this._trigger("slideEnabled"), this;
+      },
+      toggle: function toggle() {
+        return this._state.enabled ? this.disable() : this.enable(), this;
+      },
+      isEnabled: function isEnabled() {
+        return this._state.enabled;
+      },
+      on: function on(a, b) {
+        return this._bindNonQueryEventHandler(a, b), this;
+      },
+      off: function off(b, c) {
+        a ? (this.$element.off(b, c), this.$sliderElem.off(b, c)) : this._unbindNonQueryEventHandler(b, c);
+      },
+      getAttribute: function getAttribute(a) {
+        return a ? this.options[a] : this.options;
+      },
+      setAttribute: function setAttribute(a, b) {
+        return this.options[a] = b, this;
+      },
+      refresh: function refresh(d) {
+        var g = this.getValue();
+        return this._removeSliderEventHandlers(), e.call(this, this.element, this.options), d && d.useCurrentValue === !0 && this.setValue(g), a && (f === b ? (a.data(this.element, b, this), a.data(this.element, c, this)) : a.data(this.element, c, this)), this;
+      },
+      relayout: function relayout() {
+        return this._resize(), this;
+      },
+      _removeTooltipListener: function _removeTooltipListener(a, b) {
+        this.handle1.removeEventListener(a, b, !1), this.handle2.removeEventListener(a, b, !1);
+      },
+      _removeSliderEventHandlers: function _removeSliderEventHandlers() {
+        if (this.handle1.removeEventListener("keydown", this.handle1Keydown, !1), this.handle2.removeEventListener("keydown", this.handle2Keydown, !1), this.options.ticks_tooltip) {
+          for (var a = this.ticksContainer.getElementsByClassName("slider-tick"), b = 0; b < a.length; b++) {
+            a[b].removeEventListener("mouseenter", this.ticksCallbackMap[b].mouseEnter, !1), a[b].removeEventListener("mouseleave", this.ticksCallbackMap[b].mouseLeave, !1);
+          }
+
+          this.handleCallbackMap.handle1 && this.handleCallbackMap.handle2 && (this.handle1.removeEventListener("mouseenter", this.handleCallbackMap.handle1.mouseEnter, !1), this.handle2.removeEventListener("mouseenter", this.handleCallbackMap.handle2.mouseEnter, !1), this.handle1.removeEventListener("mouseleave", this.handleCallbackMap.handle1.mouseLeave, !1), this.handle2.removeEventListener("mouseleave", this.handleCallbackMap.handle2.mouseLeave, !1));
+        }
+
+        this.handleCallbackMap = null, this.ticksCallbackMap = null, this.showTooltip && this._removeTooltipListener("focus", this.showTooltip), this.hideTooltip && this._removeTooltipListener("blur", this.hideTooltip), this.showTooltip && this.sliderElem.removeEventListener("mouseenter", this.showTooltip, !1), this.hideTooltip && this.sliderElem.removeEventListener("mouseleave", this.hideTooltip, !1), this.sliderElem.removeEventListener("mousedown", this.mousedown, !1), this.touchCapable && (this.showTooltip && (this.handle1.removeEventListener("touchstart", this.showTooltip, !1), this.handle1.removeEventListener("touchmove", this.showTooltip, !1), this.handle2.removeEventListener("touchstart", this.showTooltip, !1), this.handle2.removeEventListener("touchmove", this.showTooltip, !1)), this.hideTooltip && (this.handle1.removeEventListener("touchend", this.hideTooltip, !1), this.handle2.removeEventListener("touchend", this.hideTooltip, !1)), this.showTooltip && (this.sliderElem.removeEventListener("touchstart", this.showTooltip, !1), this.sliderElem.removeEventListener("touchmove", this.showTooltip, !1)), this.hideTooltip && this.sliderElem.removeEventListener("touchend", this.hideTooltip, !1), this.sliderElem.removeEventListener("touchstart", this.touchstart, !1), this.sliderElem.removeEventListener("touchmove", this.touchmove, !1)), window.removeEventListener("resize", this.resize, !1);
+      },
+      _bindNonQueryEventHandler: function _bindNonQueryEventHandler(a, b) {
+        void 0 === this.eventToCallbackMap[a] && (this.eventToCallbackMap[a] = []), this.eventToCallbackMap[a].push(b);
+      },
+      _unbindNonQueryEventHandler: function _unbindNonQueryEventHandler(a, b) {
+        var c = this.eventToCallbackMap[a];
+        if (void 0 !== c) for (var d = 0; d < c.length; d++) {
+          if (c[d] === b) {
+            c.splice(d, 1);
+            break;
+          }
+        }
+      },
+      _cleanUpEventCallbacksMap: function _cleanUpEventCallbacksMap() {
+        for (var a = Object.keys(this.eventToCallbackMap), b = 0; b < a.length; b++) {
+          var c = a[b];
+          delete this.eventToCallbackMap[c];
+        }
+      },
+      _showTooltip: function _showTooltip() {
+        this.options.tooltip_split === !1 ? (this._addClass(this.tooltip, "in"), this.tooltip_min.style.display = "none", this.tooltip_max.style.display = "none") : (this._addClass(this.tooltip_min, "in"), this._addClass(this.tooltip_max, "in"), this.tooltip.style.display = "none"), this._state.over = !0;
+      },
+      _hideTooltip: function _hideTooltip() {
+        this._state.inDrag === !1 && this._alwaysShowTooltip !== !0 && (this._removeClass(this.tooltip, "in"), this._removeClass(this.tooltip_min, "in"), this._removeClass(this.tooltip_max, "in")), this._state.over = !1;
+      },
+      _setToolTipOnMouseOver: function _setToolTipOnMouseOver(a) {
+        function b(a, b) {
+          return b ? [100 - a.percentage[0], c.options.range ? 100 - a.percentage[1] : a.percentage[1]] : [a.percentage[0], a.percentage[1]];
+        }
+
+        var c = this,
+            d = this.options.formatter(a ? a.value[0] : this._state.value[0]),
+            e = a ? b(a, this.options.reversed) : b(this._state, this.options.reversed);
+        this._setText(this.tooltipInner, d), this.tooltip.style[this.stylePos] = e[0] + "%";
+      },
+      _copyState: function _copyState() {
+        return {
+          value: [this._state.value[0], this._state.value[1]],
+          enabled: this._state.enabled,
+          offset: this._state.offset,
+          size: this._state.size,
+          percentage: [this._state.percentage[0], this._state.percentage[1], this._state.percentage[2]],
+          inDrag: this._state.inDrag,
+          over: this._state.over,
+          dragged: this._state.dragged,
+          keyCtrl: this._state.keyCtrl
+        };
+      },
+      _addTickListener: function _addTickListener() {
+        return {
+          addMouseEnter: function addMouseEnter(a, b, c) {
+            var d = function d() {
+              var d = a._copyState(),
+                  e = b === a.handle1 ? d.value[0] : d.value[1],
+                  f = void 0;
+
+              void 0 !== c ? (e = a.options.ticks[c], f = a.options.ticks_positions.length > 0 && a.options.ticks_positions[c] || a._toPercentage(a.options.ticks[c])) : f = a._toPercentage(e), d.value[0] = e, d.percentage[0] = f, a._setToolTipOnMouseOver(d), a._showTooltip();
+            };
+
+            return b.addEventListener("mouseenter", d, !1), d;
+          },
+          addMouseLeave: function addMouseLeave(a, b) {
+            var c = function c() {
+              a._hideTooltip();
+            };
+
+            return b.addEventListener("mouseleave", c, !1), c;
+          }
+        };
+      },
+      _layout: function _layout() {
+        var a, b;
+        if (a = this.options.reversed ? [100 - this._state.percentage[0], this.options.range ? 100 - this._state.percentage[1] : this._state.percentage[1]] : [this._state.percentage[0], this._state.percentage[1]], this.handle1.style[this.stylePos] = a[0] + "%", this.handle1.setAttribute("aria-valuenow", this._state.value[0]), b = this.options.formatter(this._state.value[0]), isNaN(b) ? this.handle1.setAttribute("aria-valuetext", b) : this.handle1.removeAttribute("aria-valuetext"), this.handle2.style[this.stylePos] = a[1] + "%", this.handle2.setAttribute("aria-valuenow", this._state.value[1]), b = this.options.formatter(this._state.value[1]), isNaN(b) ? this.handle2.setAttribute("aria-valuetext", b) : this.handle2.removeAttribute("aria-valuetext"), this.rangeHighlightElements.length > 0 && Array.isArray(this.options.rangeHighlights) && this.options.rangeHighlights.length > 0) for (var c = 0; c < this.options.rangeHighlights.length; c++) {
+          var d = this._toPercentage(this.options.rangeHighlights[c].start),
+              e = this._toPercentage(this.options.rangeHighlights[c].end);
+
+          if (this.options.reversed) {
+            var f = 100 - e;
+            e = 100 - d, d = f;
+          }
+
+          var g = this._createHighlightRange(d, e);
+
+          g ? "vertical" === this.options.orientation ? (this.rangeHighlightElements[c].style.top = g.start + "%", this.rangeHighlightElements[c].style.height = g.size + "%") : (this.options.rtl ? this.rangeHighlightElements[c].style.right = g.start + "%" : this.rangeHighlightElements[c].style.left = g.start + "%", this.rangeHighlightElements[c].style.width = g.size + "%") : this.rangeHighlightElements[c].style.display = "none";
+        }
+
+        if (Array.isArray(this.options.ticks) && this.options.ticks.length > 0) {
+          var h,
+              i = "vertical" === this.options.orientation ? "height" : "width";
+          h = "vertical" === this.options.orientation ? "marginTop" : this.options.rtl ? "marginRight" : "marginLeft";
+          var j = this._state.size / (this.options.ticks.length - 1);
+
+          if (this.tickLabelContainer) {
+            var k = 0;
+            if (0 === this.options.ticks_positions.length) "vertical" !== this.options.orientation && (this.tickLabelContainer.style[h] = -j / 2 + "px"), k = this.tickLabelContainer.offsetHeight;else for (l = 0; l < this.tickLabelContainer.childNodes.length; l++) {
+              this.tickLabelContainer.childNodes[l].offsetHeight > k && (k = this.tickLabelContainer.childNodes[l].offsetHeight);
+            }
+            "horizontal" === this.options.orientation && (this.sliderElem.style.marginBottom = k + "px");
+          }
+
+          for (var l = 0; l < this.options.ticks.length; l++) {
+            var m = this.options.ticks_positions[l] || this._toPercentage(this.options.ticks[l]);
+
+            this.options.reversed && (m = 100 - m), this.ticks[l].style[this.stylePos] = m + "%", this._removeClass(this.ticks[l], "in-selection"), this.options.range ? m >= a[0] && m <= a[1] && this._addClass(this.ticks[l], "in-selection") : "after" === this.options.selection && m >= a[0] ? this._addClass(this.ticks[l], "in-selection") : "before" === this.options.selection && m <= a[0] && this._addClass(this.ticks[l], "in-selection"), this.tickLabels[l] && (this.tickLabels[l].style[i] = j + "px", "vertical" !== this.options.orientation && void 0 !== this.options.ticks_positions[l] ? (this.tickLabels[l].style.position = "absolute", this.tickLabels[l].style[this.stylePos] = m + "%", this.tickLabels[l].style[h] = -j / 2 + "px") : "vertical" === this.options.orientation && (this.options.rtl ? this.tickLabels[l].style.marginRight = this.sliderElem.offsetWidth + "px" : this.tickLabels[l].style.marginLeft = this.sliderElem.offsetWidth + "px", this.tickLabelContainer.style[h] = this.sliderElem.offsetWidth / 2 * -1 + "px"), this._removeClass(this.tickLabels[l], "label-in-selection label-is-selection"), this.options.range ? m >= a[0] && m <= a[1] && (this._addClass(this.tickLabels[l], "label-in-selection"), (m === a[0] || a[1]) && this._addClass(this.tickLabels[l], "label-is-selection")) : ("after" === this.options.selection && m >= a[0] ? this._addClass(this.tickLabels[l], "label-in-selection") : "before" === this.options.selection && m <= a[0] && this._addClass(this.tickLabels[l], "label-in-selection"), m === a[0] && this._addClass(this.tickLabels[l], "label-is-selection")));
+          }
+        }
+
+        var n;
+
+        if (this.options.range) {
+          n = this.options.formatter(this._state.value), this._setText(this.tooltipInner, n), this.tooltip.style[this.stylePos] = (a[1] + a[0]) / 2 + "%";
+          var o = this.options.formatter(this._state.value[0]);
+
+          this._setText(this.tooltipInner_min, o);
+
+          var p = this.options.formatter(this._state.value[1]);
+          this._setText(this.tooltipInner_max, p), this.tooltip_min.style[this.stylePos] = a[0] + "%", this.tooltip_max.style[this.stylePos] = a[1] + "%";
+        } else n = this.options.formatter(this._state.value[0]), this._setText(this.tooltipInner, n), this.tooltip.style[this.stylePos] = a[0] + "%";
+
+        if ("vertical" === this.options.orientation) this.trackLow.style.top = "0", this.trackLow.style.height = Math.min(a[0], a[1]) + "%", this.trackSelection.style.top = Math.min(a[0], a[1]) + "%", this.trackSelection.style.height = Math.abs(a[0] - a[1]) + "%", this.trackHigh.style.bottom = "0", this.trackHigh.style.height = 100 - Math.min(a[0], a[1]) - Math.abs(a[0] - a[1]) + "%";else {
+          "right" === this.stylePos ? this.trackLow.style.right = "0" : this.trackLow.style.left = "0", this.trackLow.style.width = Math.min(a[0], a[1]) + "%", "right" === this.stylePos ? this.trackSelection.style.right = Math.min(a[0], a[1]) + "%" : this.trackSelection.style.left = Math.min(a[0], a[1]) + "%", this.trackSelection.style.width = Math.abs(a[0] - a[1]) + "%", "right" === this.stylePos ? this.trackHigh.style.left = "0" : this.trackHigh.style.right = "0", this.trackHigh.style.width = 100 - Math.min(a[0], a[1]) - Math.abs(a[0] - a[1]) + "%";
+          var q = this.tooltip_min.getBoundingClientRect(),
+              r = this.tooltip_max.getBoundingClientRect();
+          "bottom" === this.options.tooltip_position ? q.right > r.left ? (this._removeClass(this.tooltip_max, "bottom"), this._addClass(this.tooltip_max, "top"), this.tooltip_max.style.top = "", this.tooltip_max.style.bottom = "22px") : (this._removeClass(this.tooltip_max, "top"), this._addClass(this.tooltip_max, "bottom"), this.tooltip_max.style.top = this.tooltip_min.style.top, this.tooltip_max.style.bottom = "") : q.right > r.left ? (this._removeClass(this.tooltip_max, "top"), this._addClass(this.tooltip_max, "bottom"), this.tooltip_max.style.top = "18px") : (this._removeClass(this.tooltip_max, "bottom"), this._addClass(this.tooltip_max, "top"), this.tooltip_max.style.top = this.tooltip_min.style.top);
+        }
+      },
+      _createHighlightRange: function _createHighlightRange(a, b) {
+        return this._isHighlightRange(a, b) ? a > b ? {
+          start: b,
+          size: a - b
+        } : {
+          start: a,
+          size: b - a
+        } : null;
+      },
+      _isHighlightRange: function _isHighlightRange(a, b) {
+        return a >= 0 && 100 >= a && b >= 0 && 100 >= b ? !0 : !1;
+      },
+      _resize: function _resize(a) {
+        this._state.offset = this._offset(this.sliderElem), this._state.size = this.sliderElem[this.sizePos], this._layout();
+      },
+      _removeProperty: function _removeProperty(a, b) {
+        a.style.removeProperty ? a.style.removeProperty(b) : a.style.removeAttribute(b);
+      },
+      _mousedown: function _mousedown(a) {
+        if (!this._state.enabled) return !1;
+        a.preventDefault && a.preventDefault(), this._state.offset = this._offset(this.sliderElem), this._state.size = this.sliderElem[this.sizePos];
+
+        var b = this._getPercentage(a);
+
+        if (this.options.range) {
+          var c = Math.abs(this._state.percentage[0] - b),
+              d = Math.abs(this._state.percentage[1] - b);
+          this._state.dragged = d > c ? 0 : 1, this._adjustPercentageForRangeSliders(b);
+        } else this._state.dragged = 0;
+
+        this._state.percentage[this._state.dragged] = b, this.touchCapable && (document.removeEventListener("touchmove", this.mousemove, !1), document.removeEventListener("touchend", this.mouseup, !1)), this.mousemove && document.removeEventListener("mousemove", this.mousemove, !1), this.mouseup && document.removeEventListener("mouseup", this.mouseup, !1), this.mousemove = this._mousemove.bind(this), this.mouseup = this._mouseup.bind(this), this.touchCapable && (document.addEventListener("touchmove", this.mousemove, !1), document.addEventListener("touchend", this.mouseup, !1)), document.addEventListener("mousemove", this.mousemove, !1), document.addEventListener("mouseup", this.mouseup, !1), this._state.inDrag = !0;
+
+        var e = this._calculateValue();
+
+        return this._trigger("slideStart", e), this.setValue(e, !1, !0), a.returnValue = !1, this.options.focus && this._triggerFocusOnHandle(this._state.dragged), !0;
+      },
+      _touchstart: function _touchstart(a) {
+        this._mousedown(a);
+      },
+      _triggerFocusOnHandle: function _triggerFocusOnHandle(a) {
+        0 === a && this.handle1.focus(), 1 === a && this.handle2.focus();
+      },
+      _keydown: function _keydown(a, b) {
+        if (!this._state.enabled) return !1;
+        var c;
+
+        switch (b.keyCode) {
+          case 37:
+          case 40:
+            c = -1;
+            break;
+
+          case 39:
+          case 38:
+            c = 1;
+        }
+
+        if (c) {
+          if (this.options.natural_arrow_keys) {
+            var d = "horizontal" === this.options.orientation,
+                e = "vertical" === this.options.orientation,
+                f = this.options.rtl,
+                g = this.options.reversed;
+            d ? f ? g || (c = -c) : g && (c = -c) : e && (g || (c = -c));
+          }
+
+          var h;
+
+          if (this.ticksAreValid && this.options.lock_to_ticks) {
+            var i = void 0;
+            i = this.options.ticks.indexOf(this._state.value[a]), -1 === i && (i = 0, window.console.warn("(lock_to_ticks) _keydown: index should not be -1")), i += c, i = Math.max(0, Math.min(this.options.ticks.length - 1, i)), h = this.options.ticks[i];
+          } else h = this._state.value[a] + c * this.options.step;
+
+          var j = this._toPercentage(h);
+
+          if (this._state.keyCtrl = a, this.options.range) {
+            this._adjustPercentageForRangeSliders(j);
+
+            var k = this._state.keyCtrl ? this._state.value[0] : h,
+                l = this._state.keyCtrl ? h : this._state.value[1];
+            h = [Math.max(this.options.min, Math.min(this.options.max, k)), Math.max(this.options.min, Math.min(this.options.max, l))];
+          } else h = Math.max(this.options.min, Math.min(this.options.max, h));
+
+          return this._trigger("slideStart", h), this.setValue(h, !0, !0), this._trigger("slideStop", h), this._pauseEvent(b), delete this._state.keyCtrl, !1;
+        }
+      },
+      _pauseEvent: function _pauseEvent(a) {
+        a.stopPropagation && a.stopPropagation(), a.preventDefault && a.preventDefault(), a.cancelBubble = !0, a.returnValue = !1;
+      },
+      _mousemove: function _mousemove(a) {
+        if (!this._state.enabled) return !1;
+
+        var b = this._getPercentage(a);
+
+        this._adjustPercentageForRangeSliders(b), this._state.percentage[this._state.dragged] = b;
+
+        var c = this._calculateValue(!0);
+
+        return this.setValue(c, !0, !0), !1;
+      },
+      _touchmove: function _touchmove(a) {
+        void 0 !== a.changedTouches && a.preventDefault && a.preventDefault();
+      },
+      _adjustPercentageForRangeSliders: function _adjustPercentageForRangeSliders(a) {
+        if (this.options.range) {
+          var b = this._getNumDigitsAfterDecimalPlace(a);
+
+          b = b ? b - 1 : 0;
+
+          var c = this._applyToFixedAndParseFloat(a, b);
+
+          0 === this._state.dragged && this._applyToFixedAndParseFloat(this._state.percentage[1], b) < c ? (this._state.percentage[0] = this._state.percentage[1], this._state.dragged = 1) : 1 === this._state.dragged && this._applyToFixedAndParseFloat(this._state.percentage[0], b) > c ? (this._state.percentage[1] = this._state.percentage[0], this._state.dragged = 0) : 0 === this._state.keyCtrl && this._toPercentage(this._state.value[1]) < a ? (this._state.percentage[0] = this._state.percentage[1], this._state.keyCtrl = 1, this.handle2.focus()) : 1 === this._state.keyCtrl && this._toPercentage(this._state.value[0]) > a && (this._state.percentage[1] = this._state.percentage[0], this._state.keyCtrl = 0, this.handle1.focus());
+        }
+      },
+      _mouseup: function _mouseup(a) {
+        if (!this._state.enabled) return !1;
+
+        var b = this._getPercentage(a);
+
+        this._adjustPercentageForRangeSliders(b), this._state.percentage[this._state.dragged] = b, this.touchCapable && (document.removeEventListener("touchmove", this.mousemove, !1), document.removeEventListener("touchend", this.mouseup, !1)), document.removeEventListener("mousemove", this.mousemove, !1), document.removeEventListener("mouseup", this.mouseup, !1), this._state.inDrag = !1, this._state.over === !1 && this._hideTooltip();
+
+        var c = this._calculateValue(!0);
+
+        return this.setValue(c, !1, !0), this._trigger("slideStop", c), this._state.dragged = null, !1;
+      },
+      _setValues: function _setValues(a, b) {
+        var c = 0 === a ? 0 : 100;
+        this._state.percentage[a] !== c && (b.data[a] = this._toValue(this._state.percentage[a]), b.data[a] = this._applyPrecision(b.data[a]));
+      },
+      _calculateValue: function _calculateValue(a) {
+        var b = {};
+        return this.options.range ? (b.data = [this.options.min, this.options.max], this._setValues(0, b), this._setValues(1, b), a && (b.data[0] = this._snapToClosestTick(b.data[0]), b.data[1] = this._snapToClosestTick(b.data[1]))) : (b.data = this._toValue(this._state.percentage[0]), b.data = parseFloat(b.data), b.data = this._applyPrecision(b.data), a && (b.data = this._snapToClosestTick(b.data))), b.data;
+      },
+      _snapToClosestTick: function _snapToClosestTick(a) {
+        for (var b = [a, 1 / 0], c = 0; c < this.options.ticks.length; c++) {
+          var d = Math.abs(this.options.ticks[c] - a);
+          d <= b[1] && (b = [this.options.ticks[c], d]);
+        }
+
+        return b[1] <= this.options.ticks_snap_bounds ? b[0] : a;
+      },
+      _applyPrecision: function _applyPrecision(a) {
+        var b = this.options.precision || this._getNumDigitsAfterDecimalPlace(this.options.step);
+
+        return this._applyToFixedAndParseFloat(a, b);
+      },
+      _getNumDigitsAfterDecimalPlace: function _getNumDigitsAfterDecimalPlace(a) {
+        var b = ("" + a).match(/(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/);
+        return b ? Math.max(0, (b[1] ? b[1].length : 0) - (b[2] ? +b[2] : 0)) : 0;
+      },
+      _applyToFixedAndParseFloat: function _applyToFixedAndParseFloat(a, b) {
+        var c = a.toFixed(b);
+        return parseFloat(c);
+      },
+      _getPercentage: function _getPercentage(a) {
+        !this.touchCapable || "touchstart" !== a.type && "touchmove" !== a.type && "touchend" !== a.type || (a = a.changedTouches[0]);
+        var b = a[this.mousePos],
+            c = this._state.offset[this.stylePos],
+            d = b - c;
+        "right" === this.stylePos && (d = -d);
+        var e = d / this._state.size * 100;
+        return e = Math.round(e / this._state.percentage[2]) * this._state.percentage[2], this.options.reversed && (e = 100 - e), Math.max(0, Math.min(100, e));
+      },
+      _validateInputValue: function _validateInputValue(a) {
+        if (isNaN(+a)) {
+          if (Array.isArray(a)) return this._validateArray(a), a;
+          throw new Error(g.formatInvalidInputErrorMsg(a));
+        }
+
+        return +a;
+      },
+      _validateArray: function _validateArray(a) {
+        for (var b = 0; b < a.length; b++) {
+          var c = a[b];
+          if ("number" != typeof c) throw new Error(g.formatInvalidInputErrorMsg(c));
+        }
+      },
+      _setDataVal: function _setDataVal(a) {
+        this.element.setAttribute("data-value", a), this.element.setAttribute("value", a), this.element.value = a;
+      },
+      _trigger: function _trigger(b, c) {
+        c = c || 0 === c ? c : void 0;
+        var d = this.eventToCallbackMap[b];
+        if (d && d.length) for (var e = 0; e < d.length; e++) {
+          var f = d[e];
+          f(c);
+        }
+        a && this._triggerJQueryEvent(b, c);
+      },
+      _triggerJQueryEvent: function _triggerJQueryEvent(a, b) {
+        var c = {
+          type: a,
+          value: b
+        };
+        this.$element.trigger(c), this.$sliderElem.trigger(c);
+      },
+      _unbindJQueryEventHandlers: function _unbindJQueryEventHandlers() {
+        this.$element.off(), this.$sliderElem.off();
+      },
+      _setText: function _setText(a, b) {
+        "undefined" != typeof a.textContent ? a.textContent = b : "undefined" != typeof a.innerText && (a.innerText = b);
+      },
+      _removeClass: function _removeClass(a, b) {
+        for (var c = b.split(" "), d = a.className, e = 0; e < c.length; e++) {
+          var f = c[e],
+              g = new RegExp("(?:\\s|^)" + f + "(?:\\s|$)");
+          d = d.replace(g, " ");
+        }
+
+        a.className = d.trim();
+      },
+      _addClass: function _addClass(a, b) {
+        for (var c = b.split(" "), d = a.className, e = 0; e < c.length; e++) {
+          var f = c[e],
+              g = new RegExp("(?:\\s|^)" + f + "(?:\\s|$)"),
+              h = g.test(d);
+          h || (d += " " + f);
+        }
+
+        a.className = d.trim();
+      },
+      _offsetLeft: function _offsetLeft(a) {
+        return a.getBoundingClientRect().left;
+      },
+      _offsetRight: function _offsetRight(a) {
+        return a.getBoundingClientRect().right;
+      },
+      _offsetTop: function _offsetTop(a) {
+        for (var b = a.offsetTop; (a = a.offsetParent) && !isNaN(a.offsetTop);) {
+          b += a.offsetTop, "BODY" !== a.tagName && (b -= a.scrollTop);
+        }
+
+        return b;
+      },
+      _offset: function _offset(a) {
+        return {
+          left: this._offsetLeft(a),
+          right: this._offsetRight(a),
+          top: this._offsetTop(a)
+        };
+      },
+      _css: function _css(b, c, d) {
+        if (a) a.style(b, c, d);else {
+          var e = c.replace(/^-ms-/, "ms-").replace(/-([\da-z])/gi, function (a, b) {
+            return b.toUpperCase();
+          });
+          b.style[e] = d;
+        }
+      },
+      _toValue: function _toValue(a) {
+        return this.options.scale.toValue.apply(this, [a]);
+      },
+      _toPercentage: function _toPercentage(a) {
+        return this.options.scale.toPercentage.apply(this, [a]);
+      },
+      _setTooltipPosition: function _setTooltipPosition() {
+        var a = [this.tooltip, this.tooltip_min, this.tooltip_max];
+
+        if ("vertical" === this.options.orientation) {
+          var b;
+          b = this.options.tooltip_position ? this.options.tooltip_position : this.options.rtl ? "left" : "right";
+          var c = "left" === b ? "right" : "left";
+          a.forEach(function (a) {
+            this._addClass(a, b), a.style[c] = "100%";
+          }.bind(this));
+        } else "bottom" === this.options.tooltip_position ? a.forEach(function (a) {
+          this._addClass(a, "bottom"), a.style.top = "22px";
+        }.bind(this)) : a.forEach(function (a) {
+          this._addClass(a, "top"), a.style.top = -this.tooltip.outerHeight - 14 + "px";
+        }.bind(this));
+      },
+      _getClosestTickIndex: function _getClosestTickIndex(a) {
+        for (var b = Math.abs(a - this.options.ticks[0]), c = 0, d = 0; d < this.options.ticks.length; ++d) {
+          var e = Math.abs(a - this.options.ticks[d]);
+          b > e && (b = e, c = d);
+        }
+
+        return c;
+      },
+      _setTickIndex: function _setTickIndex() {
+        this.ticksAreValid && (this._state.tickIndex = [this.options.ticks.indexOf(this._state.value[0]), this.options.ticks.indexOf(this._state.value[1])]);
+      }
+    }, a && a.fn && (a.fn.slider ? (windowIsDefined && window.console.warn("bootstrap-slider.js - WARNING: $.fn.slider namespace is already bound. Use the $.fn.bootstrapSlider namespace instead."), f = c) : (a.bridget(b, d), f = b), a.bridget(c, d), a(function () {
+      a("input[data-provide=slider]")[f]();
+    }));
+  }(a), d;
+});
+
 /***/ }),
 
 /***/ "./resources/js/bootstrap.js":
@@ -48840,7 +49944,7 @@ window._ = __webpack_require__(/*! lodash */ "./node_modules/lodash/lodash.js");
  */
 
 try {
-  window.Popper = __webpack_require__(/*! popper.js */ "./node_modules/popper.js/dist/esm/popper.js").default;
+  window.Popper = __webpack_require__(/*! popper.js */ "./node_modules/popper.js/dist/esm/popper.js")["default"];
   window.$ = window.jQuery = __webpack_require__(/*! jquery */ "./node_modules/jquery/dist/jquery.js");
 
   __webpack_require__(/*! bootstrap */ "./node_modules/bootstrap/dist/js/bootstrap.js");
