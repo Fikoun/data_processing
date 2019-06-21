@@ -14,7 +14,7 @@ class MeasurementsController extends Controller
     	$all = Measurement::all();
 
     	return view('measurements.list', ['measurements' => $all]);
-    }
+    }  
 
     private function composeData($results)
     {
@@ -29,6 +29,31 @@ class MeasurementsController extends Controller
     	return $data;
     }
 
+    public function ajaxUpdate($id)
+    {
+        $measurement = Measurement::find($id);
+        
+        $new_data = new Data;
+        $new_data->measurement_id = $id;
+        $new_data->type = 'temp';
+        $new_data->value = rand(5,25);
+        date_default_timezone_set('Europe/Prague');
+        $new_data->created_at = date('Y-m-d H:i:s');
+        $new_data->updated_at = date('Y-m-d H:i:s');
+        $new_data->save();
+
+        $new_data = new Data;
+        $new_data->measurement_id = $id;
+        $new_data->type = 'volt';
+        $new_data->value = rand(160,240);
+        $new_data->created_at = date('Y-m-d H:i:s');
+        $new_data->updated_at = date('Y-m-d H:i:s');
+        $new_data->save();
+        
+        return ["dataTemp" => $this->composeData($measurement->temp),
+                "dataVolt" => $this->composeData($measurement->volt)];   
+    }
+
     public function show($id)
     {
     	$measurement = Measurement::find($id);
@@ -36,7 +61,8 @@ class MeasurementsController extends Controller
     	return view('measurements.measurement', [
     		"dataTemp" => $this->composeData($measurement->temp),
     		"dataLayer" => $this->composeData($measurement->layer),
-    		"dataPress" => $this->composeData($measurement->press),
+            "dataPress" => $this->composeData($measurement->press),
+    		"dataVolt" => $this->composeData($measurement->volt),
     		"measurement" => $measurement]);
     }
 
@@ -69,10 +95,13 @@ class MeasurementsController extends Controller
     				case '# Pressure':
     					$type = 3;
     					break;
+                    case '# Voltage':
+                        $type = 4;
+                        break;
     			}
     			if (count($parts) == 2) {
 	    			$d = new Data;
-	    			$d->created_at = Date("Y-m-d H:i:s", strtotime($parts[0]));
+	    			$d->created_at = date("Y-m-d H:i:s", strtotime($parts[0]));
 	    			$d->value = $parts[1];
 	    			$d->measurement_id = $measurement->id;
 	    			switch ($type) {
@@ -85,6 +114,9 @@ class MeasurementsController extends Controller
 	    				case 3:
 	    					$d->type = "press";
 	    					break;
+                        case 3:
+                            $d->type = "volt";
+                            break;
 	    			}
 	    			$d->save();
 	    		}
@@ -123,15 +155,20 @@ class MeasurementsController extends Controller
 			$data .= "\t" . $result->value . "\n";
 		}
 		$data .= "\n\n# Layer\n";
-		foreach ($measurement->temp as $result) {
+		foreach ($measurement->layer as $result) {
 			$data .= date("H:i:s", strtotime($result->created_at));
 			$data .= "\t" . $result->value . "\n";
 		}
 		$data .= "\n\n# Pressure\n";
-		foreach ($measurement->temp as $result) {
+		foreach ($measurement->press as $result) {
 			$data .= date("H:i:s", strtotime($result->created_at));
 			$data .= "\t" . $result->value . "\n";
 		}
+        $data .= "\n\n# Voltage\n";
+        foreach ($measurement->volt as $result) {
+            $data .= date("H:i:s", strtotime($result->created_at));
+            $data .= "\t" . $result->value . "\n";
+        }
 		$fileName = time() . '_data.txt';
 		Storage::put('/public/exports/'.$fileName, $data);
 		return Storage::download('/public/exports/'.$fileName);

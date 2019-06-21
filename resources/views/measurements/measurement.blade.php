@@ -31,48 +31,33 @@
 var temperature = {
   x: {!! $dataTemp['x'] !!},
   y: {!! $dataTemp['y'] !!},
-  name: 'Temperature',
+  name: 'Temperature (°C)',
   type: 'scatter'
 };
-var layer = {
-  x: {!! $dataLayer['x'] !!},
-  y: {!! $dataLayer['y'] !!},
-  name: 'Layer',
+var voltage = {
+  x: {!! $dataVolt['x'] !!},
+  y: {!! $dataVolt['y'] !!},
+  name: 'Voltage (V)',
   yaxis: 'y2',
-  type: 'scatter'
-};
-var pressure = {
-  x: {!! $dataPress['x'] !!},
-  y: {!! $dataPress['y'] !!},
-  name: 'Pressure',
-  yaxis: 'y3',
   type: 'scatter',
   line: {
-      color: '#d62728',
-    }
+    color: '#d62728',
+  }
 };
-var data = [temperature, layer, pressure];
 
+var data = [temperature, voltage];
+console.log(data);
 var layout = {
   title: "{{ $measurement->title }}",
   showlegend: false,
   xaxis: {domain: [0.1, 1]},
   yaxis: {
-    title: 'Temperature',
+    title: 'Temperature (°C)',
     titlefont: {color: '#1f77b4'},
     tickfont: {color: '#1f77b4'}
   },
   yaxis2: {
-    title: 'Layer',
-    titlefont: {color: '#ff7f0e'},
-    tickfont: {color: '#ff7f0e'},
-    anchor: 'free',
-    overlaying: 'y',
-    side: 'left',
-    position: 0
-  },
-  yaxis3: {
-    title: 'Pressure',
+    title: 'Voltage (V)',
     titlefont: {color: '#d62728'},
     tickfont: {color: '#d62728'},
     anchor: 'x',
@@ -81,6 +66,21 @@ var layout = {
   }
 };
 Plotly.newPlot('plot', data, layout, { scrollZoom: true, responsive: true });
-
+function updatePlot() {
+  $.get("{{ route('ajax_update', $measurement->id) }}",
+  function(data){
+    temperature.x = JSON.parse(data.dataTemp.x)
+    temperature.y = JSON.parse(data.dataTemp.y)
+  
+    voltage.x = JSON.parse(data.dataVolt.x)
+    voltage.y = JSON.parse(data.dataVolt.y)
+  
+    data = [temperature, voltage];
+    console.log(data);
+    Plotly.react('plot', data, layout, { scrollZoom: true, responsive: true });
+    setTimeout(updatePlot, 1000);
+  });
+}
+setTimeout(updatePlot, 1000);
 </script>
 @endsection

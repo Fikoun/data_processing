@@ -26,4 +26,8 @@ class Measurement extends Model
     	return $this->hasMany(Data::class)->where('type', '=', 'press');
     }
 
+    public function volt()
+    {
+        return $this->hasMany(Data::class)->where('type', '=', 'volt');
+    }
 }

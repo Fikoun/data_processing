@@ -23,6 +23,9 @@ Route::get('/measurements/delete/{measurement}', 'MeasurementsController@delete'
 // Export
 Route::get('/measurements/export/{measurement}', 'MeasurementsController@export')->name('export_measurement');
 
+// AJAX
+Route::get('/ajax/update/{measurement}', 'MeasurementsController@ajaxUpdate')->name('ajax_update');
+
 
 
 
