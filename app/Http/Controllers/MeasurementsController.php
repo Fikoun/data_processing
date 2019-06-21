@@ -29,10 +29,8 @@ class MeasurementsController extends Controller
     	return $data;
     }
 
-    public function ajaxUpdate($id)
+    private function insertRandomData()
     {
-        $measurement = Measurement::find($id);
-        
         $new_data = new Data;
         $new_data->measurement_id = $id;
         $new_data->type = 'temp';
@@ -49,6 +47,13 @@ class MeasurementsController extends Controller
         $new_data->created_at = date('Y-m-d H:i:s');
         $new_data->updated_at = date('Y-m-d H:i:s');
         $new_data->save();
+    }
+
+    public function ajaxUpdate($id)
+    {
+        $measurement = Measurement::find($id);
+        
+        // $this->insertRandomData();
         
         return ["dataTemp" => $this->composeData($measurement->temp),
                 "dataVolt" => $this->composeData($measurement->volt)];   

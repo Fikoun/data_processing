@@ -17,6 +17,7 @@ class CreateMeasurementsTable extends Migration
             $table->bigIncrements('id');
             $table->string('title');
             $table->text('desc');
+            $table->dateTime('first_time')->nullable();
             $table->timestamps();
         });
     }
