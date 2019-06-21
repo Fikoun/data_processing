@@ -14,16 +14,15 @@ mydb = mysql.connector.connect(
 db = mydb.cursor()
 
 
-serial = serial.Serial("IVI", 9600, timeout=1)
+serial = serial.Serial("COM3", 9600, timeout=1)
 
 
-for i in range(0,5):
-    serial.write(bytes("F\r", 'utf-8'))
+for i in range(0,60):
+    serial.write(bytes("C\r", 'utf-8'))
     temp = serial.readline().decode()
     t.sleep(1);
     #print("value: ", temp)
     temp = temp.replace('\n','').replace('\r', '').replace('>','')
-    temp = round(( int(temp) - 32 ) * 5/9, 1)
     time = datetime.datetime.now().strftime(f)
     try:
         db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('1', 'temp', '{temp}', '{time}', '{time}');")
@@ -34,6 +33,5 @@ for i in range(0,5):
         print("Error Code:", err.errno)
         print("SQLSTATE", err.sqlstate)
         print("Message", err.msg)
-    print("Teplota: ", round(temp,1))
 
 serial.close()
