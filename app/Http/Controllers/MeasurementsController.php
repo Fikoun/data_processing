@@ -59,6 +59,15 @@ class MeasurementsController extends Controller
                 "dataVolt" => $this->composeData($measurement->volt)];   
     }
 
+    public function last()
+    {
+        $measurement_id = Measurement::all()->last();
+        if ($measurement_id) 
+            $measurement_id = $measurement_id->id;
+        else
+            return redirect("/");
+    }
+
     public function show($id)
     {
     	$measurement = Measurement::find($id);

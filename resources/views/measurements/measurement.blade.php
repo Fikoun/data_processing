@@ -2,23 +2,44 @@
 
 @section('content')
 <div class="container-fluid">
-	<ul class="nav nav-pills mb-3">
-	  <li class="nav-item">
-	    <a class="nav-link active" data-toggle="pill" href="#pills-graph" role="tab" aria-controls="pills-graph" aria-selected="true">Graph</a>
-	  </li>
-	  <li class="nav-item">
-	    <a class="nav-link" data-toggle="pill" href="#pills-settings" role="tab" aria-controls="pills-settings" aria-selected="false">Settings</a>
-	  </li>
-	  <li class="nav-item">
-	    <a class="nav-link" data-toggle="pill" href="#pills-export" role="tab" aria-controls="pills-export" aria-selected="false">Export</a>
-	  </li>
-	</ul>
+  <div>
+  	<ul class="nav nav-pills mr-auto">
+  	  <li class="nav-item">
+  	    <a class="nav-link active" data-toggle="pill" href="#pills-graph" role="tab" aria-controls="pills-graph" aria-selected="true">Graph</a>
+  	  </li>
+  	  <li class="nav-item">
+  	    <a class="nav-link" data-toggle="pill" href="#pills-settings" role="tab" aria-controls="pills-settings" aria-selected="false">Settings</a>
+  	  </li>
+  	  <li class="nav-item">
+  	    <a class="nav-link" data-toggle="pill" href="#pills-export" role="tab" aria-controls="pills-export" aria-selected="false">Export</a>
+  	  </li>
+
+      
+  	</ul>
+
+    <div class="float-right">
+        <!-- <span class="down">
+          <div class="spinner-grow text-success" role="status">
+            <span class="sr-only">Loading...</span>
+          </div>
+        </span> -->
+
+        <button class="btn nohover btn-outline-primary">Temperature: 55 °C
+        </button>
+        <button class="btn nohover btn-outline-danger">Voltage: 5 V</button>
+    </div>
+  </div>
+
+   
 	<div class="tab-content" style="margin-top: 50px">
     <div class="tab-pane fade show active" id="pills-graph" role="tabpanel" aria-labelledby="pills-graph-tab">
         @include('measurements.plot')
-        <div class="slidecontainer px-5">
-          <input type="range" min="0" max="10" value="5" class="slider" id="voltage">
-        </div>
+        @guest
+        @else
+          <div class="slidecontainer px-5">
+            <input type="range" min="0" max="5" value="0" class="slider" id="voltage">
+          </div>
+        @endguest
         <h2 class="text-center py-4">
           Voltage <span class="text-danger" id="voltage-display"></span>
         </h2>
@@ -53,10 +74,11 @@ var voltage = {
 
 var data = [temperature, voltage];
 console.log(data);
+
 var layout = {
   title: "{{ $measurement->title }}",
   showlegend: false,
-  xaxis: {domain: [0.1, 1]},
+  xaxis: {domain: [0, 1]},
   yaxis: {
     title: 'Temperature (°C)',
     titlefont: {color: '#1f77b4'},
@@ -87,9 +109,10 @@ slider.oninput = function() {
         _token : '<?php echo csrf_token() ?>',
         value : this.value
      },
-     success:function() {}
+     success: function() {}
   });
 } 
+
 
 // PLOT update handler (AJAX)
 function updatePlot() {
@@ -104,9 +127,15 @@ function updatePlot() {
     data = [temperature, voltage];
     console.log(data);
     Plotly.react('plot', data, layout, { scrollZoom: true, responsive: true });
+    output.innerHTML = slider.value;
     setTimeout(updatePlot, 1000);
+    live_temp = temperature.y[temperature.y.length - 1];
+    live_volt = voltage.y[voltage.y.length - 1];
   });
 }
 setTimeout(updatePlot, 1000);
+
+live_temp = temperature.y[temperature.y.length - 1];
+live_volt = voltage.y[voltage.y.length - 1];
 </script>
 @endsection

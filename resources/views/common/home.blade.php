@@ -16,7 +16,7 @@
 			  <h5 class="card-header">Voltage-Temperature</h5>
 			  <div class="card-body">
 			    <img src="{{{ asset('temp.png') }}}" height="200px"> <br>
-			    	<a href="{{ route('measurement', 1) }}" class="btn btn-success my-3">Open measurement</a>
+			    	<a href="{{ route('measurement_last') }}" class="btn btn-success my-3">Open measurement</a>
 			  </div>
 			</div>
 		</div>

@@ -11,6 +11,7 @@ Route::get('/documentation', 'CommonController@documentation')->name('documentat
 // 	MEASUREMENT
 // Show
 Route::get('/measurements', 'MeasurementsController@list')->name('measurements');
+Route::get('/measurement/last', 'MeasurementsController@last')->name('measurement_last');
 Route::get('/measurement/{measurement}', 'MeasurementsController@show')->name('measurement');
 // Create
 Route::get('/measurements/create', 'MeasurementsController@create')->name('create_measurement');
@@ -27,8 +28,6 @@ Route::get('/measurements/export/{measurement}', 'MeasurementsController@export'
 // AJAX
 Route::get('/ajax/update/{measurement}', 'MeasurementsController@ajaxUpdate')->name('ajax_update');
 
-
-//	AJAX
 Route::post('/set/{type}', 'CommonController@set')->name('set');
 
 

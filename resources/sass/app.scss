@@ -1,4 +1,5 @@
 
+
 // Fonts
 @import url('https://fonts.googleapis.com/css?family=Nunito');
 
@@ -15,9 +16,18 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
+.btn.nohover:hover {
+    cursor:default !important;
+}
+
 #plot{
 	max-width: 100%;
 	width: 100%;
+  height: 450px;
+}
+
+.down{
+  transform: translateY(80px);
 }
 
 

@@ -11,15 +11,26 @@
 				<div class="form-group">
 				    <label for="title">Title</label>
 				    <input name="title" type="text" class="form-control" placeholder="Measurement_1">
-				  </div>
-				  <div class="form-group">
+				</div>
+
+				<div class="form-group">
+				    <label for="title">Presets</label>
+				    <select class="form-control" name="preset">
+				      <option> -- Select preset -- </option>
+				      <option>MOTES preasure chamber</option>
+				      <option>X-Band epr</option>
+				    </select>
+				 </div>
+
+				<div class="form-group">
 				    <label for="description">Description</label>
 				    <textarea name="desc" class="form-control" placeholder="Description..."></textarea>
-				  </div>
-				  <div class="form-group">
+				</div>
+
+				<div class="form-group">
 				    <label for="description">Import data</label> <br>
 				    <input type="file" name="import_file">
-				  </div>
+				</div>
 				   
 				  <button type="submit" class="btn btn-primary">Create</button>       		
 	       </form>
