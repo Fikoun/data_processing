@@ -14,12 +14,18 @@
 	  </li>
 	</ul>
 	<div class="tab-content" style="margin-top: 50px">
-	  <div class="tab-pane fade show active" id="pills-graph" role="tabpanel" aria-labelledby="pills-graph-tab">
-    	@include('measurements.plot')
-	</div>
-	  <div class="tab-pane fade" id="pills-settings" role="tabpanel" aria-labelledby="pills-settings-tab">
-	  		@include('measurements.edit')
-	  </div>
+    <div class="tab-pane fade show active" id="pills-graph" role="tabpanel" aria-labelledby="pills-graph-tab">
+        @include('measurements.plot')
+        <div class="slidecontainer px-5">
+          <input type="range" min="0" max="10" value="5" class="slider" id="voltage">
+        </div>
+        <h2 class="text-center py-4">
+          Voltage <span class="text-danger" id="voltage-display"></span>
+        </h2>
+    </div>
+    <div class="tab-pane fade" id="pills-settings" role="tabpanel" aria-labelledby="pills-settings-tab">
+    		@include('measurements.edit')
+    </div>
 	  <div class="tab-pane fade" id="pills-export" role="tabpanel" aria-labelledby="pills-export-tab">
 	  		@include('measurements.export')
 	  </div>
@@ -66,6 +72,26 @@ var layout = {
   }
 };
 Plotly.newPlot('plot', data, layout, { scrollZoom: true, responsive: true });
+
+var slider = document.getElementById("voltage");
+var output = document.getElementById("voltage-display");
+output.innerHTML = slider.value;
+
+// SLIDER handler
+slider.oninput = function() {
+  output.innerHTML = this.value;
+  $.ajax({
+     type:'POST',
+     url:'/set/voltage',
+     data: {
+        _token : '<?php echo csrf_token() ?>',
+        value : this.value
+     },
+     success:function() {}
+  });
+} 
+
+// PLOT update handler (AJAX)
 function updatePlot() {
   $.get("{{ route('ajax_update', $measurement->id) }}",
   function(data){

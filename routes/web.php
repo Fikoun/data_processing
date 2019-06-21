@@ -23,10 +23,15 @@ Route::get('/measurements/delete/{measurement}', 'MeasurementsController@delete'
 // Export
 Route::get('/measurements/export/{measurement}', 'MeasurementsController@export')->name('export_measurement');
 
+<<<<<<< HEAD
 // AJAX
 Route::get('/ajax/update/{measurement}', 'MeasurementsController@ajaxUpdate')->name('ajax_update');
 
 
+=======
+//	AJAX
+Route::post('/set/{type}', 'CommonController@set')->name('set');
+>>>>>>> c315bc07e78acea180460d7e16c6cfe51256d47c
 
 
 Auth::routes();
