@@ -16,7 +16,8 @@
 				<div class="form-group">
 				    <label for="title">Presets</label>
 				    <select class="form-control" name="preset">
-				      <option> -- Select preset -- </option>
+				    	<option>-</option>
+				      <option> Temperature & Voltage </option>
 				      <option>MOTES preasure chamber</option>
 				      <option>X-Band epr</option>
 				    </select>

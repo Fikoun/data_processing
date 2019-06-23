@@ -20,7 +20,7 @@ class MeasurementsController extends Controller
     {
     	$data = ['x' => [], 'y' => []];
     	foreach ($results as $result) {
-    		$data['x'][] = date("H:i:s", strtotime($result->created_at));
+    		$data['x'][] = date("i:s", strtotime($result->created_at));
     		$data['y'][] = $result->value;
     	}
     	$data['x'] = json_encode($data['x']);
@@ -29,7 +29,7 @@ class MeasurementsController extends Controller
     	return $data;
     }
 
-    private function insertRandomData()
+    private function insertRandomData($id)
     {
         $new_data = new Data;
         $new_data->measurement_id = $id;
@@ -53,7 +53,7 @@ class MeasurementsController extends Controller
     {
         $measurement = Measurement::find($id);
         
-        // $this->insertRandomData();
+        //$this->insertRandomData($id);
         
         return ["dataTemp" => $this->composeData($measurement->temp),
                 "dataVolt" => $this->composeData($measurement->volt)];   

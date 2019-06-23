@@ -25,7 +25,7 @@
 			  <h5 class="card-header">Evaporation Chamber</h5>
 			  <div class="card-body">
 			    <img src="{{{ asset('chamber.jpg') }}}" height="200px"> <br>
-			    <a href="#" class="btn btn-secondary my-3">comming soon ..</a>
+			    <a href="#" class="btn btn-secondary my-3">Coming soon ..</a>
 			  </div>
 			</div>
 		</div>

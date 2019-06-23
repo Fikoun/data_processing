@@ -13,17 +13,17 @@ class Measurement extends Model
 
     public function temp()
     {
-    	return $this->hasMany(Data::class)->where('type', '=', 'temp');
+    	return $this->hasMany(Data::class)->where('type', '=', 'temp')->orderBy('created_at', 'asc');
     }
 
     public function layer()
     {
-    	return $this->hasMany(Data::class)->where('type', '=', 'layer');
+    	return $this->hasMany(Data::class)->where('type', '=', 'layer')->orderBy('created_at', 'asc');
     }
 
     public function press()
     {
-    	return $this->hasMany(Data::class)->where('type', '=', 'press');
+    	return $this->hasMany(Data::class)->where('type', '=', 'press')->orderBy('created_at', 'asc');
     }
 
     public function volt()

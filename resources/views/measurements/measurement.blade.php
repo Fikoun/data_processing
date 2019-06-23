@@ -18,15 +18,18 @@
   	</ul>
 
     <div class="float-right">
+       <button class="btn nohover btn-warning mr-5" onclick="stop()" id="stop">Stop</button>
         <!-- <span class="down">
           <div class="spinner-grow text-success" role="status">
             <span class="sr-only">Loading...</span>
           </div>
         </span> -->
 
-        <button class="btn nohover btn-outline-primary">Temperature: 55 °C
+
+
+        <button class="btn nohover btn-outline-primary">Temperature: <span id="live_temp">  </span> °C
         </button>
-        <button class="btn nohover btn-outline-danger">Voltage: 5 V</button>
+        <button class="btn nohover btn-outline-danger">Voltage: <span id="live_volt">  </span> V</button>
     </div>
   </div>
 
@@ -97,6 +100,8 @@ Plotly.newPlot('plot', data, layout, { scrollZoom: true, responsive: true });
 
 var slider = document.getElementById("voltage");
 var output = document.getElementById("voltage-display");
+var live_temp = document.getElementById("live_temp");
+var live_volt = document.getElementById("live_volt");
 output.innerHTML = slider.value;
 
 // SLIDER handler
@@ -128,14 +133,28 @@ function updatePlot() {
     console.log(data);
     Plotly.react('plot', data, layout, { scrollZoom: true, responsive: true });
     output.innerHTML = slider.value;
-    setTimeout(updatePlot, 1000);
-    live_temp = temperature.y[temperature.y.length - 1];
-    live_volt = voltage.y[voltage.y.length - 1];
+    live_temp.innerText = temperature.y[temperature.y.length - 1];
+    live_volt.innerText = voltage.y[voltage.y.length - 1];
+    if (loading)
+      setTimeout(updatePlot, 1000);
   });
 }
 setTimeout(updatePlot, 1000);
 
-live_temp = temperature.y[temperature.y.length - 1];
-live_volt = voltage.y[voltage.y.length - 1];
+var loading = true;
+function stop() {
+  if (loading) {
+    loading = false;
+    document.getElementById('stop').innerText = "Start"
+  }else{
+    loading = true;
+    document.getElementById('stop').innerText = "Stop"
+    setTimeout(updatePlot, 10);
+  }
+  
+}
+
+live_temp.innerText = temperature.y[temperature.y.length - 1];
+live_volt.innerText = voltage.y[voltage.y.length - 1];
 </script>
 @endsection
