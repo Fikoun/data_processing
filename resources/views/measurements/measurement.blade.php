@@ -121,7 +121,7 @@ slider.oninput = function() {
 
 // PLOT update handler (AJAX)
 function updatePlot() {
-  $.get("{{ route('ajax_update', $measurement->id) }}",
+  $.get("{{ route('ajax_update', $measurement->id) }}", {volt : slider.value},
   function(data){
     temperature.x = JSON.parse(data.dataTemp.x)
     temperature.y = JSON.parse(data.dataTemp.y)

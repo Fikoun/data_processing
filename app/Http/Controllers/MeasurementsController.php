@@ -31,27 +31,33 @@ class MeasurementsController extends Controller
 
     private function insertRandomData($id)
     {
+        $time = date('Y-m-d H:i:s');;
         $new_data = new Data;
         $new_data->measurement_id = $id;
         $new_data->type = 'temp';
-        $new_data->value = rand(5,25);
+        $new_data->value = rand(24,30);
         date_default_timezone_set('Europe/Prague');
-        $new_data->created_at = date('Y-m-d H:i:s');
-        $new_data->updated_at = date('Y-m-d H:i:s');
+        $new_data->created_at = $time;
+        $new_data->updated_at = $time;
         $new_data->save();
 
         $new_data = new Data;
         $new_data->measurement_id = $id;
         $new_data->type = 'volt';
-        $new_data->value = rand(160,240);
-        $new_data->created_at = date('Y-m-d H:i:s');
-        $new_data->updated_at = date('Y-m-d H:i:s');
+        $new_data->value = 0;
+        $new_data->created_at = $time;
+        $new_data->updated_at = $time;
         $new_data->save();
     }
 
     public function ajaxUpdate($id)
     {
         $measurement = Measurement::find($id);
+        if ($measurement->volt->count()) {
+            $last_volt = $measurement->volt->last();
+            $last_volt->value = request('volt');
+            $last_volt->save();
+        }
         
         //$this->insertRandomData($id);
         
@@ -66,6 +72,7 @@ class MeasurementsController extends Controller
             $measurement_id = $measurement_id->id;
         else
             return redirect("/");
+        return $this->show($measurement_id);
     }
 
     public function show($id)
