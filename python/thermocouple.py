@@ -17,21 +17,23 @@ db = mydb.cursor()
 serial = serial.Serial("COM3", 9600, timeout=1)
 
 
-for i in range(0,60):
-    serial.write(bytes("C\r", 'utf-8'))
-    temp = serial.readline().decode()
+for i in range(0,5):
+    serial.write(bytes("F\r", 'utf-8'))
     t.sleep(1);
-    #print("value: ", temp)
+    temp = serial.read()
+    t.sleep(1);
+    print("value: ", temp)
     temp = temp.replace('\n','').replace('\r', '').replace('>','')
     time = datetime.datetime.now().strftime(f)
-    try:
-        db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('1', 'temp', '{temp}', '{time}', '{time}');")
-        mydb.commit()
+    
+    # try:
+    #     db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('1', 'temp', '{temp}', '{time}', '{time}');")
+    #     mydb.commit()
      
-    except mysql.connector.Error as err:
-        print(err)
-        print("Error Code:", err.errno)
-        print("SQLSTATE", err.sqlstate)
-        print("Message", err.msg)
+    # except mysql.connector.Error as err:
+    #     print(err)
+    #     print("Error Code:", err.errno)
+    #     print("SQLSTATE", err.sqlstate)
+    #     print("Message", err.msg)
 
 serial.close()
