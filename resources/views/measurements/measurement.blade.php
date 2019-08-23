@@ -42,10 +42,11 @@
           <div class="slidecontainer px-5">
             <input type="range" min="0" max="5" value="0" class="slider" id="voltage">
           </div>
-        @endguest
+        
         <h2 class="text-center py-4">
           Voltage <span class="text-danger" id="voltage-display"></span>
         </h2>
+        @endguest
     </div>
     <div class="tab-pane fade" id="pills-settings" role="tabpanel" aria-labelledby="pills-settings-tab">
     		@include('measurements.edit')
@@ -105,23 +106,34 @@ var live_volt = document.getElementById("live_volt");
 output.innerHTML = slider.value;
 
 // SLIDER handler
+var setting = true;
 slider.oninput = function() {
-  output.innerHTML = this.value;
-  $.ajax({
-     type:'POST',
-     url:'/set/voltage',
-     data: {
-        _token : '<?php echo csrf_token() ?>',
-        value : this.value
-     },
-     success: function() {}
-  });
+  if (setting) {
+      setting = false;
+      if (this.value > 1) {
+        var val = 5;
+      }else{
+        var val = 0;
+      }
+      output.innerHTML = this.value;
+      $.ajax({
+         type:'POST',
+         url:'/set/voltage',
+         data: {
+            _token : '<?php echo csrf_token() ?>',
+            value : val
+         },
+         success: function() {
+            setting = true;
+         }
+      });
+  }
 } 
 
 
 // PLOT update handler (AJAX)
 function updatePlot() {
-  $.get("{{ route('ajax_update', $measurement->id) }}", {volt : slider.value},
+  $.get("{{ route('ajax_update', $measurement->id) }}",
   function(data){
     temperature.x = JSON.parse(data.dataTemp.x)
     temperature.y = JSON.parse(data.dataTemp.y)
@@ -137,9 +149,22 @@ function updatePlot() {
     live_volt.innerText = voltage.y[voltage.y.length - 1];
     if (loading)
       setTimeout(updatePlot, 1000);
+
+    @guest
+    @else
+      updateVolt(slider.value);
+    @endguest
+
   });
 }
 setTimeout(updatePlot, 1000);
+
+function updateVolt(volt) {
+  $.get("{{ route('ajax_update_volt', $measurement->id) }}", {volt: volt},
+  function(data){
+    console.log(data);
+  });
+}
 
 var loading = true;
 function stop() {

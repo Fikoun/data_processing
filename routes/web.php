@@ -27,6 +27,7 @@ Route::get('/measurements/export/{measurement}', 'MeasurementsController@export'
 
 // AJAX
 Route::get('/ajax/update/{measurement}', 'MeasurementsController@ajaxUpdate')->name('ajax_update');
+Route::get('/ajax/update/volt/{measurement}', 'MeasurementsController@ajaxUpdateVolt')->name('ajax_update_volt');
 
 Route::post('/set/{type}', 'CommonController@set')->name('set');
 

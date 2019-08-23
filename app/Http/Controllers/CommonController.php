@@ -29,8 +29,8 @@ class CommonController extends Controller
         var_dump(request('value'));
         if ($type == 'voltage') {
             $value = (int)request('value');
-            var_dump("python set.py $value");
-            var_dump(passthru("python C:/xampp/htdocs/data_processing/python/set.pyset.py $value"));
+            //var_dump("python set.py $value");
+            var_dump(passthru("python C:/xampp/htdocs/data_processing/python/set.py $value"));
         }
     }
 }

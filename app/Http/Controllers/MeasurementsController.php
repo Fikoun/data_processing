@@ -53,10 +53,27 @@ class MeasurementsController extends Controller
     public function ajaxUpdate($id)
     {
         $measurement = Measurement::find($id);
-        if ($measurement->volt->count()) {
-            $last_volt = $measurement->volt->last();
-            $last_volt->value = request('volt');
-            $last_volt->save();
+               
+        //$this->insertRandomData($id);
+        
+        return ["dataTemp" => $this->composeData($measurement->temp),
+                "dataVolt" => $this->composeData($measurement->volt)];   
+    }
+
+    public function ajaxUpdateVolt($id)
+    {
+        $measurement = Measurement::find($id);
+        if ($measurement->temp->count()) {
+            $last = $measurement->temp->last();
+            $time = $last->created_at;
+
+            $new_data = new Data;
+            $new_data->measurement_id = $id;
+            $new_data->type = 'volt';
+            $new_data->value = request('volt');
+            $new_data->created_at = $time;
+            $new_data->updated_at = $time;
+            $new_data->save();
         }
         
         //$this->insertRandomData($id);
@@ -143,7 +160,9 @@ class MeasurementsController extends Controller
 	    		}
     		}
     	}
-    	return redirect("/measurements");
+        passthru("python C:/xampp/htdocs/data_processing/python/thermocouple.py " . $measurement->id);
+
+    	return redirect("/measurement/" . $measurement->id);
     }
 
     public function edit($id)

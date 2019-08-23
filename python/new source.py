@@ -66,7 +66,7 @@ class SerialController():
 
 	def getTempTime(self):
 		# Get temperature and time
-		temp = self.serialSend("IDN?\r", True)
+		temp = self.serialSend("C\r", True)
 		time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 		print(f"At {time} thermocouple returned: {temp}")
 
