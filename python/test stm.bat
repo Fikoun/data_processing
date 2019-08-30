@@ -1,0 +1,3 @@
+python stm.py
+
+pause

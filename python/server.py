@@ -66,7 +66,7 @@ class SerialController():
 
 	def getTempTime(self):
 		# Get temperature and time
-		temp = self.serialSend("IDN?\r", True)
+		temp = self.serialSend("C\r", True)
 		time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 		print(f"At {time} thermocouple returned: {temp}")
 
@@ -123,7 +123,13 @@ if __name__ == '__main__':
 	# Setup themocouple
 	print("\n\n\t\tTHERMOCOUPLE")
 	thermocouple = SerialController("COM3", 38400)
-	thermocouple.test()
+	thermocouple.getTempTime()
+
+	# Setup STM
+	print("\n\n\t\tSTM")
+	stm = SerialController("COM5", 9600)
+	print("response: ", stm.serialSend("\x02@\r", True))
+	
 	
 	# Setup Http Server
 	server = HTTPServer(('127.0.0.1', 8080), RequestHandler)

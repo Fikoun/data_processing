@@ -124,6 +124,12 @@ if __name__ == '__main__':
 	print("\n\n\t\tTHERMOCOUPLE")
 	thermocouple = SerialController("COM3", 38400)
 	thermocouple.test()
+
+
+	# Setup STM
+	print("\n\n\t\tSTM")
+	stm = SerialController("COM5", 9600)
+	stm.test()
 	
 	# Setup Http Server
 	server = HTTPServer(('127.0.0.1', 8080), RequestHandler)
