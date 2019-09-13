@@ -98,12 +98,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 			}).encode())
 
 		# For thermocouple control use "temp" command
-		if self.path.startswith("/temp"):
+		if self.path.startswith("/get"):
 			
 			temp, time = thermocouple.getTempTime()
 
 			self.wfile.write(json.dumps({
-				'temperature': temp,
+				'variables': {'temperature': temp},
 				'time': time,
 			}).encode())
 
