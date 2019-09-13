@@ -1,12 +1,11 @@
 import time
 import mysql.connector
-import urllib, json
-
+import urllib.request, json 
 url = "localhost:8080/get"
 
-response = urllib.urlopen(url)
+url = urllib.request.urlopen("http://maps.googleapis.com/maps/api/geocode/json?address=google")
 
-data = json.loads(response.read())
+data = json.loads(url.read().decode())
 
 print(data)
 
