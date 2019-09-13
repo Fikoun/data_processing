@@ -124,11 +124,6 @@ if __name__ == '__main__':
 	print("\n\n\t\tTHERMOCOUPLE")
 	thermocouple = SerialController("COM3", 38400)
 	thermocouple.getTempTime()
-
-	# Setup STM
-	print("\n\n\t\tSTM")
-	stm = SerialController("COM5", 9600)
-	print("response: ", stm.serialSend("\x02@\r", True))
 	
 	
 	# Setup Http Server
