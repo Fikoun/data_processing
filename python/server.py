@@ -81,11 +81,11 @@ class SerialController():
 class RequestHandler(BaseHTTPRequestHandler):
 	def do_GET(self):
 		values = self.path.split("/")
-
+		self.send_response(200)
+		self.end_headers()
 		# For supply control use "set" command
 		if self.path.startswith("/set"):
-			self.send_response(200)
-			self.end_headers()
+			
 
 			if self.path.startswith("/setV"):
 				supply.setVolt(int(values[2]), float(values[3]))

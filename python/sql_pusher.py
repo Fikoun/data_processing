@@ -1,13 +1,8 @@
-import time
+from time import sleep
 import mysql.connector
-import urllib.request, json 
-url = "localhost:8080/get"
+import requests
 
-url = urllib.request.urlopen("http://maps.googleapis.com/maps/api/geocode/json?address=google")
-
-data = json.loads(url.read().decode())
-
-print(data)
+url = "http://127.0.0.1:8080/get"
 
 mydb = mysql.connector.connect(
 	host="localhost",
@@ -15,21 +10,26 @@ mydb = mysql.connector.connect(
 	passwd="",
 	database="data_processing"
 )
-	
-temp = 7
-time = datetime.datetime.now().strftime(f)
-try:
-	db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('1', 'temp', '{temp}', '{time}', '{time}');")
-	mydb.commit()
-except mysql.connector.Error as err:
-	print(err)
-	print("Error Code:", err.errno)
-	print("SQLSTATE", err.sqlstate)
-	print("Message", err.msg)
+db = mydb.cursor()	
 
 def interval(delay):
+	r = requests.get(url=url)
 
-	time.sleep()
-	interval()
+	data = r.json()
 
-interval(4)
+	print(data)
+
+	temp = data["variables"]["temperature"]
+	time = data["time"]
+	try:
+		db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('1', 'temp', '{temp}', '{time}', '{time}');")
+		mydb.commit()
+	except mysql.connector.Error as err:
+		print(err)
+		print("Error Code:", err.errno)
+		print("SQLSTATE", err.sqlstate)
+		print("Message", err.msg)
+	sleep(delay)
+	interval(delay)
+
+interval(2)
