@@ -23,6 +23,12 @@
 				    </select>
 				 </div>
 
+				 <div class="form-group">
+				    <label for="duration">Duration</label>
+				    <input name="duration" type="number" class="form-control" placeholder="seconds">
+				</div>
+
+
 				<div class="form-group">
 				    <label for="description">Description</label>
 				    <textarea name="desc" class="form-control" placeholder="Description..."></textarea>

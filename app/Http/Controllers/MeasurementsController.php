@@ -160,7 +160,7 @@ class MeasurementsController extends Controller
 	    		}
     		}
     	}
-        passthru("python C:/xampp/htdocs/data_processing/python/thermocouple.py " . $measurement->id);
+        system("python C:/xampp/htdocs/data_processing/python/server.py");
 
     	return redirect("/measurement/" . $measurement->id);
     }

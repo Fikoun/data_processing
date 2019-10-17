@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 import json
-
+import os
 import serial
 import time
 import datetime
@@ -83,6 +83,10 @@ class RequestHandler(BaseHTTPRequestHandler):
 		values = self.path.split("/")
 		self.send_response(200)
 		self.end_headers()
+
+		if self.path.startswith("/stop"):
+			exit()
+
 		# For supply control use "set" command
 		if self.path.startswith("/set"):
 			
@@ -111,13 +115,15 @@ class RequestHandler(BaseHTTPRequestHandler):
 	
 if __name__ == '__main__':
 	# Setup power supply
+
+	print(os.getpid())
 	print("\n\n\t\tPOWER SUPPLY")
-	supply = SerialController("COM4", 9600)
-	supply.test()
+	#supply = SerialController("COM4", 9600)
+	#supply.test()
 	# Disable output and reset channels
-	supply.output()
-	supply.setCh(1)
-	supply.setCh(2)
+	#supply.output()
+	#supply.setCh(1)
+	#supply.setCh(2)
 
 
 	# Setup themocouple
