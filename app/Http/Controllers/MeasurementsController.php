@@ -114,7 +114,8 @@ class MeasurementsController extends Controller
     	$measurement = new Measurement;
 
     	$measurement->title = request('title');	
-    	$measurement->desc = request('desc');	
+        $measurement->desc = request('desc');   
+    	$measurement->duration = request('duration');	
     	$measurement->save();
 
     	if (request()->file('import_file') !== null) {
@@ -160,6 +161,7 @@ class MeasurementsController extends Controller
 	    		}
     		}
     	}
+        
         system("python C:/xampp/htdocs/data_processing/python/server.py");
 
     	return redirect("/measurement/" . $measurement->id);

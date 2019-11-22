@@ -29,27 +29,27 @@ class SerialController():
 			return False
 
 
-	def serialSend(self, command, read=False):
-		if self.serial.isOpen():
+	def serialSend(self, command=False, read=False):
+		if self.serial.isOpen() or command != False:
 			#self.serial.write(bytes(command, 'ascii'))
 			self.serial.write(command)
 		
+		time.sleep(1)
 		#print(self.serial.read(8).decode('ascii'))
 		out = self.serial.readline()
-		print(out)
-		return struct.unpack('>HH', out)
+		return out.decode("ascii")
 
 
 	def test(self, mess):
 		print("\tTEST:\t", self.serialSend(mess, True), "\n")
 
 
-stm = SerialController("COM6", 9600)
+stm = SerialController("COM7", 9600)
 
-print("OUTPUT1: ", stm.serialSend(1))
-print("OUTPUT2: ", stm.serialSend(2))
-print("OUTPUT3: ", stm.serialSend(3))
-print("OUTPUT4: ", stm.serialSend(51))
-print("OUTPUT5: ", stm.serialSend(51))
-print("OUTPUT6: ", stm.serialSend(41))
+print("OUTPUT1: ", stm.serialSend())
+print("OUTPUT2: ", stm.serialSend())
+print("OUTPUT3: ", stm.serialSend())
+print("OUTPUT4: ", stm.serialSend())
+print("OUTPUT5: ", stm.serialSend())
+print("OUTPUT6: ", stm.serialSend())
 print()

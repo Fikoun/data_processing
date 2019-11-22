@@ -17,7 +17,7 @@
 				    <label for="title">Presets</label>
 				    <select class="form-control" name="preset">
 				    	<option>-</option>
-				      <option> Temperature & Voltage </option>
+				      <option>Temperature & Voltage</option>
 				      <option>MOTES preasure chamber</option>
 				      <option>X-Band epr</option>
 				    </select>

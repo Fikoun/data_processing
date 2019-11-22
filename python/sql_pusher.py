@@ -18,6 +18,18 @@ start_time = time.time()
 measurement_id = sys.argv[1]
 max_counter = int(sys.argv[2])
 
+def saveData(measurement_id, typ, value, timestamp):
+	try:
+		db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('{measurement_id}', '{typ}', '{value}', '{timestamp}', '{timestamp}');")
+		mydb.commit()
+	except mysql.connector.Error as err:
+		print(err)
+		print("Error Code:", err.errno)
+		print("SQLSTATE", err.sqlstate)
+		print("Message", err.msg)
+	pass
+
+
 def interval(delay):
 	global measurement_id, max_counter, start_time
 
@@ -25,21 +37,18 @@ def interval(delay):
 		return
 
 	r = requests.get(url=url)
-
 	data = r.json()
 
 	print(data)
 
-	temp = data["variables"]["temperature"]
 	timestamp = data["time"]
-	try:
-		db.execute(f"INSERT INTO `data` (`measurement_id`, `type`, `value`, `created_at`, `updated_at`) VALUES ('{measurement_id}', 'temp', '{temp}', '{timestamp}', '{timestamp}');")
-		mydb.commit()
-	except mysql.connector.Error as err:
-		print(err)
-		print("Error Code:", err.errno)
-		print("SQLSTATE", err.sqlstate)
-		print("Message", err.msg)
+
+	# TEMPERATURE
+	saveData(measurement_id, "temp", data["variables"]["temperature"], timestamp)
+	
+	# PREASSURE
+	saveData(measurement_id, "press", data["variables"]["preassure"], timestamp)
+	
 	time.sleep(delay)
 	interval(delay)
 

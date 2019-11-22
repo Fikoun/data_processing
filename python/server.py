@@ -43,7 +43,11 @@ class SerialController():
 				print(command + " not sent !")
 				return False
 
-		if self.serial.isOpen() and read:
+		if read:
+			return self.serialRead();
+
+	def serialRead(self):
+		if self.serial.isOpen():
 			return self.serial.readline().decode()
 
 
@@ -89,8 +93,6 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 		# For supply control use "set" command
 		if self.path.startswith("/set"):
-			
-
 			if self.path.startswith("/setV"):
 				supply.setVolt(int(values[2]), float(values[3]))
 			elif self.path.startswith("/setI"):
@@ -103,11 +105,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 		# For thermocouple control use "temp" command
 		if self.path.startswith("/get"):
-			
 			temp, time = thermocouple.getTempTime()
+			preassure = preassure_meter.serialRead()
 
 			self.wfile.write(json.dumps({
-				'variables': {'temperature': temp},
+				'variables': {'temperature': temp,
+							  'preassure'  : preassure},
 				'time': time,
 			}).encode())
 
@@ -130,6 +133,12 @@ if __name__ == '__main__':
 	print("\n\n\t\tTHERMOCOUPLE")
 	thermocouple = SerialController("COM3", 38400)
 	thermocouple.getTempTime()
+
+
+	# Setup preassure
+	print("\n\n\t\tPREASSURE")
+	preassure_meter = SerialController("COM7", 9600)
+	preassure_meter.serialRead()
 	
 	
 	# Setup Http Server
