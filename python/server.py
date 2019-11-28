@@ -114,6 +114,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 				'time': time,
 			}).encode())
 
+		# For status check
+		if self.path.startswith("/status"):
+			self.wfile.write(json.dumps({
+				'status': True
+			}).encode())
+
 		return
 	
 if __name__ == '__main__':

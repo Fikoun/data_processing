@@ -13,8 +13,6 @@
   	  <li class="nav-item">
   	    <a class="nav-link" data-toggle="pill" href="#pills-export" role="tab" aria-controls="pills-export" aria-selected="false">Export</a>
   	  </li>
-
-      
   	</ul>
 
     <div class="float-right">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Measurement;
+use App\Python;
 use App\Data;
 use Illuminate\Support\Facades\Storage;
 
@@ -12,8 +13,19 @@ class MeasurementsController extends Controller
     public function list()
     {
     	$all = Measurement::all();
+        $server = Python::server_status();
 
-    	return view('measurements.list', ['measurements' => $all]);
+        
+        switch ($server['status']) {
+            case true:
+                $server = ['color' => 'success', 'status' => 'Running...'];
+                break;
+            case false:
+                $server = ['color' => 'secondary', 'status' => 'Not Running!'];
+                break;
+        }
+
+    	return view('measurements.list', ['measurements' => $all, 'server' => $server]);
     }  
 
     private function composeData($results)
@@ -115,7 +127,8 @@ class MeasurementsController extends Controller
 
     	$measurement->title = request('title');	
         $measurement->desc = request('desc');   
-    	$measurement->duration = request('duration');	
+        $measurement->duration = request('duration');   
+    	$measurement->status = 'new';	
     	$measurement->save();
 
     	if (request()->file('import_file') !== null) {
@@ -162,8 +175,6 @@ class MeasurementsController extends Controller
     		}
     	}
         
-        system("python C:/xampp/htdocs/data_processing/python/server.py");
-
     	return redirect("/measurement/" . $measurement->id);
     }
 

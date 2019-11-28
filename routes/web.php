@@ -32,8 +32,9 @@ Route::get('/ajax/update/volt/{measurement}', 'MeasurementsController@ajaxUpdate
 Route::post('/set/{type}', 'CommonController@set')->name('set');
 
 
-// PYTHON spawners
-Route::get('/python/server', 'PythonController@server')->name('python_server');
+// PYTHON api
+Route::get('/server/{action}', 'PythonController@action')->name('python_server');
+
 
 
 Auth::routes();
