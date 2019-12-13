@@ -6,7 +6,7 @@
 	<ul class="navbar-nav ml-auto">
 		 <li class="nav-item dropdown">
               	<button id="status-button" type="button" class="btn btn-{{ $server['color'] }} nav-link dropdown-toggle px-3" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-				   Status:  <span class="badge badge-light p-1"> <span id="status-value">{{ $server['status'] }}</span> 
+				   Server:  <span class="badge badge-light p-1"> <span id="status-value">{{ $server['message'] }}</span> 
 
 							<div id="loading" class="spinner-border spinner-border-sm" role="status" style="display: none">
 							  <span class="sr-only">Loading...</span>
@@ -38,7 +38,7 @@
 					    <a  href="{{ route('measurement', $measurement->id) }}" class="btn btn-primary">Open measurement</a>
 					  </div>
 					  <div class="card-footer text-muted">
-					    Last data: 1 min
+					    Last data: ...
 					  </div>
 					</div>
 				</div>		 
@@ -55,7 +55,8 @@
 </div>
 
 <script type="text/javascript">
-var url_base = "http://data.processing/"
+var server_status = {{ $server['status'] }};
+var restart = false;
 
 function changeStatus($status) {
 	$('#status-button').removeClass('btn-success');
@@ -65,10 +66,24 @@ function changeStatus($status) {
 	switch($status){
 		case true:
 			$('#status-button').addClass('btn-success');
+
+			if (!server_status) 
+				server_status = true;
+			else
+				updateStatus(500)
 		break;
 
 		case false:
 			$('#status-button').addClass('btn-secondary');
+			
+			if (server_status) {
+				if (restart) {
+					serverCommand('start')
+				}
+				server_status = false;
+			}
+			else
+				updateStatus(500)
 		break;
 	}
 	$('#status-value').html($status ? 'Running...' : 'Not Running!');
@@ -78,11 +93,11 @@ function changeStatus($status) {
 
 function updateStatus(delay) {
 	setTimeout(function() {
-		$.ajax({ url: url_base + "server/status" }).done(function( data ) {
+		$.ajax({ url:  "/server/status" }).done(function( data ) {
 			console.log(data);
-			  changeStatus(data['status'])
+			changeStatus(data['status'])
 		});
-	}, 2000);
+	}, delay);
 }
 	
 
@@ -90,16 +105,17 @@ function serverCommand(command) {
 	$('#loading').show();
 	switch(command) {
 		case 'start':
-			$.ajax({ url: url_base + "server/start" })
+			$.ajax({ url:  "server/start" })
 		break;
 		case 'stop':
-			$.ajax({ url: url_base + "server/stop" })
+			$.ajax({ url:  "server/stop" })
 		break;
 		case 'restart':
-			
+			$.ajax({ url:  "server/stop" })
+
 		break;
 	}
-	updateStatus();
+	updateStatus(1000);
 }
 
 

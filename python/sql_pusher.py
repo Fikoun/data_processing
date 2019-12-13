@@ -34,6 +34,8 @@ def interval(delay):
 	global measurement_id, max_counter, start_time
 
 	if (time.time() - start_time) >= max_counter:
+		db.execute(f"UPDATE `measurements` SET status='done' WHERE id='{measurement_id}';")
+		mydb.commit()
 		return
 
 	r = requests.get(url=url)

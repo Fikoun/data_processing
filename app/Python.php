@@ -3,6 +3,7 @@
 namespace App;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Measurement;
 
 class Python extends Model
 {
@@ -27,4 +28,10 @@ class Python extends Model
     	}
     	return ['status' => false];
     }
+
+    public static function measurement_start($id, $duration)
+    {
+        return system("python C:/xampp/htdocs/data_processing/python/sql_pusher.py $id $duration");
+    }
+
 }

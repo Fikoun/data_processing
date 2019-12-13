@@ -33,7 +33,9 @@ Route::post('/set/{type}', 'CommonController@set')->name('set');
 
 
 // PYTHON api
-Route::get('/server/{action}', 'PythonController@action')->name('python_server');
+Route::get('/server/{action}', 'PythonController@server')->name('python_server');
+Route::get('/start/{id}/{duration}', 'PythonController@measurement')->name('python_measurement');
+Route::get('/status/{id}', 'MeasurementsController@status')->name('python_measurement_status');
 
 
 

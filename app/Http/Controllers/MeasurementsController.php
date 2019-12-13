@@ -15,15 +15,18 @@ class MeasurementsController extends Controller
     	$all = Measurement::all();
         $server = Python::server_status();
 
-        
-        switch ($server['status']) {
+        $status = $server['status'];
+  
+        switch ($status) {
             case true:
-                $server = ['color' => 'success', 'status' => 'Running...'];
+                $server = ['color' => 'success', 'message' => 'Running...'];
                 break;
             case false:
-                $server = ['color' => 'secondary', 'status' => 'Not Running!'];
+                $server = ['color' => 'secondary', 'message' => 'Not Running!'];
                 break;
         }
+
+        $server['status'] = $status ? "true" : "false";
 
     	return view('measurements.list', ['measurements' => $all, 'server' => $server]);
     }  
@@ -60,6 +63,12 @@ class MeasurementsController extends Controller
         $new_data->created_at = $time;
         $new_data->updated_at = $time;
         $new_data->save();
+    }
+
+    public function status($id)
+    {
+        $measurement = Measurement::find($id);
+        return response()->json($measurement);
     }
 
     public function ajaxUpdate($id)
@@ -107,6 +116,17 @@ class MeasurementsController extends Controller
     public function show($id)
     {
     	$measurement = Measurement::find($id);
+        
+        $status = $measurement['status'];
+        switch ($status)
+        {
+            case 'running':
+                $measurement['status'] = ['color' => 'success', 'message' => 'Running...', 'status'=>$status];
+                break;
+            default:
+                $measurement['status'] = ['color' => 'secondary', 'message' => 'Not Running', 'status'=>$status];
+                break;
+        }
 
     	return view('measurements.measurement', [
     		"dataTemp" => $this->composeData($measurement->temp),
