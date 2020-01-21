@@ -31,22 +31,35 @@ class MeasurementsController extends Controller
     	return view('measurements.list', ['measurements' => $all, 'server' => $server]);
     }  
 
-    private function composeData($results)
+    private function composeData($results, $data)
     {
-    	$data = ['x' => [], 'y' => []];
-    	foreach ($results as $result) {
-    		$data['x'][] = date("i:s", strtotime($result->created_at));
-    		$data['y'][] = $result->value;
-    	}
-    	$data['x'] = json_encode($data['x']);
-    	$data['y'] = json_encode($data['y']);
+    	$size = count($results);
+        if (!empty($data))
+            $size = count($data);
 
+        for ($i = 0; $i < $size; $i++) {
+            if (!isset($results[$i]))
+                $data[$i][] = 0;
+            else if (isset($data[$i])){
+                if (doubleval($data[$i][0]) != doubleval(date("i:s", strtotime($results[$i]->created_at)))){
+
+                   dd([$data[$i], date("i:s", strtotime($results[$i]->created_at))]);
+                }
+               
+                $data[$i][] = $results[$i]->value;
+
+            } else{
+
+               $data[$i] = [ date("i:s", strtotime($results[$i]->created_at)),  $results[$i]->value];
+            }
+    	}
+        
     	return $data;
     }
 
     private function insertRandomData($id)
     {
-        $time = date('Y-m-d H:i:s');;
+        $time = date('Y-m-d H:i:s');
         $new_data = new Data;
         $new_data->measurement_id = $id;
         $new_data->type = 'temp';
@@ -128,11 +141,11 @@ class MeasurementsController extends Controller
                 break;
         }
 
+        $data = $this->composeData($measurement->temp, $this->composeData($measurement->volt, []));
+        array_unshift($data, ['Time', 'Current', 'Temperature'] );
+
     	return view('measurements.measurement', [
-    		"dataTemp" => $this->composeData($measurement->temp),
-    		"dataLayer" => $this->composeData($measurement->layer),
-            "dataPress" => $this->composeData($measurement->press),
-    		"dataVolt" => $this->composeData($measurement->volt),
+    		"data" => json_encode($data),
     		"measurement" => $measurement]);
     }
 

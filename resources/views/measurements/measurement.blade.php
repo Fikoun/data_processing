@@ -36,9 +36,9 @@
         </ul>
 
 
-        <button class="btn nohover btn-outline-primary">Temperature: <span id="live_temp">  </span> °C
+        <button class="btn nohover btn-outline-primary" id="toggleTemp">Temperature: <span id="live_temp">  </span> °C
         </button>
-        <button class="btn nohover btn-outline-danger">Voltage: <span id="live_volt">  </span> V</button>
+        <button class="btn nohover btn-outline-danger" id="toggleCurr">Current: <span id="live_volt">  </span> A</button>
     </div>
   </div>
 
@@ -65,25 +65,59 @@
 	  </div>
 	</div>	
 </div>
+ <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 
 <script>
+console.log({!! $data !!})
 
-var temperature = {
-  x: {!! $dataTemp['x'] !!},
-  y: {!! $dataTemp['y'] !!},
-  name: 'Temperature (°C)',
-  type: 'scatter'
+var data = {!! $data !!};
+var options = {
+  title: '{{ $measurement->title }}',
+  curveType: 'function',
+  legend: { position: 'bottom' },
+  colors: ["#eb4034", "#2e57d1"]
 };
-var voltage = {
-  x: {!! $dataVolt['x'] !!},
-  y: {!! $dataVolt['y'] !!},
-  name: 'Voltage (V)',
-  yaxis: 'y2',
-  type: 'scatter',
-  line: {
-    color: '#d62728',
+var chart = null;
+
+google.charts.load('current', {'packages':['corechart']});
+google.charts.setOnLoadCallback(drawChart);
+
+function drawChart() {
+  data = google.visualization.arrayToDataTable( data );
+
+  chart = new google.visualization.LineChart(document.getElementById('plot'));
+
+  chart.draw(data, options);
+}
+var isTemp = true, isCurr = true;
+
+var toggleTemp = document.getElementById("toggleTemp");
+toggleTemp.onclick = function()
+{
+  view = new google.visualization.DataView(data);
+  if (isTemp) {
+    view.hideColumns([2]); 
+    
+    isTemp = false
+  }else{
+    isTemp = true
   }
-};
+  chart.draw(view, options);
+}
+
+var toggleCurr = document.getElementById("toggleCurr");
+toggleCurr.onclick = function()
+{
+  view = new google.visualization.DataView(data);
+  if (isCurr) {
+    view.hideColumns([1]); 
+    isCurr = false
+  }else{
+    isCurr = true
+  }
+  chart.draw(view, options);
+}
+drawChart();
 
 var data = [temperature, voltage];
 console.log(data);
