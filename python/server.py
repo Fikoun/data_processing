@@ -103,7 +103,7 @@ class RequestHandler(BaseHTTPRequestHandler):
 				'Voltage': float(values[3]),
 			}).encode())
 
-		# For thermocouple control use "temp" command
+		# For getting data use "get"
 		if self.path.startswith("/get"):
 			temp, time = thermocouple.getTempTime()
 			preassure = preassure_meter.serialRead()
@@ -142,7 +142,7 @@ if __name__ == '__main__':
 
 
 	# Setup preassure
-	print("\n\n\t\tPREASSURE")
+	print("\n\n\t\tPRESSURE")
 	preassure_meter = SerialController("COM7", 9600)
 	preassure_meter.serialRead()
 	

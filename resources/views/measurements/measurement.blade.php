@@ -255,7 +255,7 @@ function serverCommand(command) {
   $('#loading').show();
   switch(command) {
     case 'start':
-      $.ajax({ url: "/start/{{ $measurement['id'] }}/3" })
+      $.ajax({ url: "/start/{{ $measurement['id'] }}/{{ $measurement['duration'] }}" })
     break;
     case 'stop':
       $.ajax({ url: "/stop" })

@@ -9,24 +9,24 @@
 
   <div class="collapse navbar-collapse" id="navbarSupportedContent">
     <ul class="navbar-nav mr-auto">
-      <li class="nav-item active">    
-        <a class="nav-link" href="{{ route('home') }}">Home</span></a>
-      </li>
-      <li class="nav-item active">    
-        <a class="nav-link" href="{{ route('contact') }}">Contact</a>
-      </li>
+      
       @guest
         <li class="nav-item">
           <a class="nav-link" href="{{ route('login') }}">Login</a>
         </li>
       @else
+        <li class="nav-item active">    
+          <a class="nav-link" href="{{ route('measurements') }}">Measurements</a>
+        </li>
         <li class="nav-item">    
           <a class="nav-link" href="{{ route('documentation') }}">Documentation</span></a>
         </li>
-        <li class="nav-item">    
-          <a class="nav-link" href="{{ route('measurements') }}">Measurements</a>
-        </li>
+        
       @endguest
+
+      <li class="nav-item ">    
+        <a class="nav-link" href="{{ route('contact') }}">Contact</a>
+      </li>
 
     </ul>
     <ul class="navbar-nav ml-auto">

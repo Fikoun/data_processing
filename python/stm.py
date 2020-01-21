@@ -53,6 +53,8 @@ stm.test("\x02\x40\r")
 stm.test("\x08\x40\x03")
 stm.test("\x08\x40\r")
 
+stm.test("\x80@\r")
+
 # 0x02, 0x10, 
 
 # hex(sum('1c03e8'.encode('ascii')) % 256)

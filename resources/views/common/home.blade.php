@@ -11,21 +11,21 @@
 	<h1>Application</h1>
 
 	<div class="row justify-content-center align-items-center py-5">
-    	<div class="col my-3" >
-			<div class="card text-center bg-light card ">
+    	<!--<div class="col my-3" >
+			 <div class="card text-center bg-light card ">
 			  <h5 class="card-header">Voltage-Temperature</h5>
 			  <div class="card-body">
 			    <img src="{{{ asset('temp.png') }}}" height="200px"> <br>
 			    	<a href="{{ route('measurement_last') }}" class="btn btn-success my-3">Open measurement</a>
 			  </div>
-			</div>
-		</div>
-		<div class="col my-3" >
+			</div> 
+		</div>-->
+		<div class="col-6 my-3 " >
 			<div class="card text-center bg-light card ">
 			  <h5 class="card-header">Evaporation Chamber</h5>
 			  <div class="card-body">
 			    <img src="{{{ asset('chamber.jpg') }}}" height="200px"> <br>
-			    <a href="#" class="btn btn-secondary my-3">Coming soon ..</a>
+			    <a href="{{ route('measurement_last') }}" class="btn btn-success my-3">Open measurement</a>
 			  </div>
 			</div>
 		</div>
