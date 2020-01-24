@@ -47,22 +47,11 @@ class SerialController():
 		print("\tTEST:\t", self.serialSend(start + command + checksum + end, True), "\n")
 
 
-
-print("\n\n\t\tSTM")
-stm = SerialController("COM5", 9600)
-
-stm.test("\x40")
-
-
-# 
-# stm.test("\x02\x40\r")
-
+ print("\n\n\t\tSTM")
+ stm = SerialController("COM5", 9600)
+ stm.test("\x40")# stm.test("\x02\x40\r")
 # stm.test("\x08\x40\x03")
 # stm.test("\x08\x40\r")
-
-
 # stm.test("\x80@\r")
-
-
 # 0x02, 0x10, 
 # ser.write(serial.to_bytes([0x4C,0x12,0x01,0x00,0x03,0x40,0xFB,0x02,0x7a]))
