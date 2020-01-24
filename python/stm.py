@@ -18,7 +18,7 @@ class SerialController():
 
 		time.sleep(1)
 
-		self.serial = serial.Serial(self.com, self.baud, timeout=1)
+		self.serial = serial.Serial(self.com, self.baud, timeout=0.5)
 		
 		if self.serial.isOpen():
 			print("Successfully connected.")
@@ -40,20 +40,19 @@ class SerialController():
 	def test(self, mess):
 		print("\tTEST:\t", self.serialSend(mess, True), "\n")
 
+#load knihoven
+#import ctypes
+#hllDll = ctypes.WinDLL ("C:\\xampp\\htdocs\\data_processing\\python\\SMDP_SVRPS.dll")
 
 print("\n\n\t\tSTM")
-stm = SerialController("COM5", 9600)
 
-stm.test("\x02\x08\x40\x03")
-stm.test("\x02\x08\x40\r")
 
-stm.test("\x02\x40\x03")
-stm.test("\x02\x40\r")
+stm = SerialController("COM5", 115200)
 
-stm.test("\x08\x40\x03")
-stm.test("\x08\x40\r")
-
-stm.test("\x80@\r")
+stm.test("0x021080403D300D")
+stm.test("<0x02><0x10><0x80><0x40><0x3D><0x30><0x0D>")
+#stm.test("\x02\x10\x80\x40\x3D\x30\x0D")
+#<STX><ADDR><CMD_RSP>[<DATA>...]<CKSUM1><CKSUM2><CR>
 
 # 0x02, 0x10, 
 
