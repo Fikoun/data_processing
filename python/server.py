@@ -1,7 +1,7 @@
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 import json
-
+import os
 import serial
 import time
 import datetime
@@ -43,7 +43,11 @@ class SerialController():
 				print(command + " not sent !")
 				return False
 
-		if self.serial.isOpen() and read:
+		if read:
+			return self.serialRead();
+
+	def serialRead(self):
+		if self.serial.isOpen():
 			return self.serial.readline().decode()
 
 
@@ -81,12 +85,14 @@ class SerialController():
 class RequestHandler(BaseHTTPRequestHandler):
 	def do_GET(self):
 		values = self.path.split("/")
+		self.send_response(200)
+		self.end_headers()
+
+		if self.path.startswith("/stop"):
+			exit()
 
 		# For supply control use "set" command
 		if self.path.startswith("/set"):
-			self.send_response(200)
-			self.end_headers()
-
 			if self.path.startswith("/setV"):
 				supply.setVolt(int(values[2]), float(values[3]))
 			elif self.path.startswith("/setI"):
@@ -97,27 +103,36 @@ class RequestHandler(BaseHTTPRequestHandler):
 				'Voltage': float(values[3]),
 			}).encode())
 
-		# For thermocouple control use "temp" command
+		# For getting data use "get"
 		if self.path.startswith("/get"):
-			
 			temp, time = thermocouple.getTempTime()
+			preassure = preassure_meter.serialRead()
 
 			self.wfile.write(json.dumps({
-				'variables': {'temperature': temp},
+				'variables': {'temperature': temp,
+							  'preassure'  : preassure},
 				'time': time,
+			}).encode())
+
+		# For status check
+		if self.path.startswith("/status"):
+			self.wfile.write(json.dumps({
+				'status': True
 			}).encode())
 
 		return
 	
 if __name__ == '__main__':
 	# Setup power supply
+
+	print(os.getpid())
 	print("\n\n\t\tPOWER SUPPLY")
-	supply = SerialController("COM4", 9600)
-	supply.test()
+	#supply = SerialController("COM4", 9600)
+	#supply.test()
 	# Disable output and reset channels
-	supply.output()
-	supply.setCh(1)
-	supply.setCh(2)
+	#supply.output()
+	#supply.setCh(1)
+	#supply.setCh(2)
 
 
 	# Setup themocouple
@@ -125,10 +140,11 @@ if __name__ == '__main__':
 	thermocouple = SerialController("COM3", 38400)
 	thermocouple.getTempTime()
 
-	# Setup STM
-	print("\n\n\t\tSTM")
-	stm = SerialController("COM5", 9600)
-	print("response: ", stm.serialSend("\x02@\r", True))
+
+	# Setup preassure
+	print("\n\n\t\tPRESSURE")
+	preassure_meter = SerialController("COM7", 9600)
+	preassure_meter.serialRead()
 	
 	
 	# Setup Http Server

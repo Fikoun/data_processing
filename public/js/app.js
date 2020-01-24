@@ -49122,6 +49122,8 @@ window.Vue = __webpack_require__(/*! vue */ "./node_modules/vue/dist/vue.common.
 
 __webpack_require__(/*! ./plot */ "./resources/js/plot.js");
 
+__webpack_require__(/*! ./helpers.js */ "./resources/js/helpers.js");
+
 __webpack_require__(/*! ./bootstrap-slider */ "./resources/js/bootstrap-slider.js");
 
 /***/ }),
@@ -49984,6 +49986,45 @@ if (token) {
 //     cluster: process.env.MIX_PUSHER_APP_CLUSTER,
 //     encrypted: true
 // });
+
+/***/ }),
+
+/***/ "./resources/js/helpers.js":
+/*!*********************************!*\
+  !*** ./resources/js/helpers.js ***!
+  \*********************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+var url_base = "http://data.processing/";
+
+function serverCommand(command) {
+  switch (command) {
+    case 'start':
+      $.ajax({
+        url: url_base + "server/start"
+      }).done(function (data) {
+        console.log("data:", data.slice(0, 100));
+      });
+      break;
+
+    case 'stop':
+      $.ajax({
+        url: url_base + "server/stop"
+      }).done(function (data) {
+        console.log("data:", data.slice(0, 100));
+      });
+      break;
+
+    case 'status':
+      $.ajax({
+        url: url_base + "server/status"
+      }).done(function (data) {
+        console.log("data:", data.slice(0, 100));
+      });
+      break;
+  }
+}
 
 /***/ }),
 

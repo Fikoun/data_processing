@@ -13,23 +13,32 @@
   	  <li class="nav-item">
   	    <a class="nav-link" data-toggle="pill" href="#pills-export" role="tab" aria-controls="pills-export" aria-selected="false">Export</a>
   	  </li>
-
-      
   	</ul>
 
     <div class="float-right">
-       <button class="btn nohover btn-warning mr-5" onclick="stop()" id="stop">Stop</button>
-        <!-- <span class="down">
-          <div class="spinner-grow text-success" role="status">
-            <span class="sr-only">Loading...</span>
-          </div>
-        </span> -->
+       <ul class="navbar-nav d-inline-block">
+           <li class="nav-item dropdown">
+                      <button id="status-button" type="button" class="btn btn-{{ $measurement['status']['color'] }} nav-link dropdown-toggle px-3" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                 Measurement:  <span class="badge badge-light p-1"> <span id="status-value">{{ $measurement['status']['message'] }}</span> 
+
+                    <div id="loading" class="spinner-border spinner-border-sm" role="status" style="display: none">
+                      <span class="sr-only">Loading...</span>
+                    </div>
+                 </span>
+              </button>
+
+                    <div class="dropdown-menu dropdown-menu-right" aria-labelledby="navbarDropdown">
+                        <button class="dropdown-item text-success" onclick="serverCommand('start')">
+                          Start
+                        </button>
+                    </div>
+                </li>
+        </ul>
 
 
-
-        <button class="btn nohover btn-outline-primary">Temperature: <span id="live_temp">  </span> °C
+        <button class="btn nohover btn-outline-primary" id="toggleTemp">Temperature: <span id="live_temp">  </span> °C
         </button>
-        <button class="btn nohover btn-outline-danger">Voltage: <span id="live_volt">  </span> V</button>
+        <button class="btn nohover btn-outline-danger" id="toggleCurr">Current: <span id="live_volt">  </span> A</button>
     </div>
   </div>
 
@@ -56,25 +65,59 @@
 	  </div>
 	</div>	
 </div>
+ <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 
 <script>
+console.log({!! $data !!})
 
-var temperature = {
-  x: {!! $dataTemp['x'] !!},
-  y: {!! $dataTemp['y'] !!},
-  name: 'Temperature (°C)',
-  type: 'scatter'
+var data = {!! $data !!};
+var options = {
+  title: '{{ $measurement->title }}',
+  curveType: 'function',
+  legend: { position: 'bottom' },
+  colors: ["#eb4034", "#2e57d1"]
 };
-var voltage = {
-  x: {!! $dataVolt['x'] !!},
-  y: {!! $dataVolt['y'] !!},
-  name: 'Voltage (V)',
-  yaxis: 'y2',
-  type: 'scatter',
-  line: {
-    color: '#d62728',
+var chart = null;
+
+google.charts.load('current', {'packages':['corechart']});
+google.charts.setOnLoadCallback(drawChart);
+
+function drawChart() {
+  data = google.visualization.arrayToDataTable( data );
+
+  chart = new google.visualization.LineChart(document.getElementById('plot'));
+
+  chart.draw(data, options);
+}
+var isTemp = true, isCurr = true;
+
+var toggleTemp = document.getElementById("toggleTemp");
+toggleTemp.onclick = function()
+{
+  view = new google.visualization.DataView(data);
+  if (isTemp) {
+    view.hideColumns([2]); 
+    
+    isTemp = false
+  }else{
+    isTemp = true
   }
-};
+  chart.draw(view, options);
+}
+
+var toggleCurr = document.getElementById("toggleCurr");
+toggleCurr.onclick = function()
+{
+  view = new google.visualization.DataView(data);
+  if (isCurr) {
+    view.hideColumns([1]); 
+    isCurr = false
+  }else{
+    isCurr = true
+  }
+  chart.draw(view, options);
+}
+drawChart();
 
 var data = [temperature, voltage];
 console.log(data);
@@ -147,8 +190,12 @@ function updatePlot() {
     output.innerHTML = slider.value;
     live_temp.innerText = temperature.y[temperature.y.length - 1];
     live_volt.innerText = voltage.y[voltage.y.length - 1];
+    
+    updateStatus(100);
+    
     if (loading)
       setTimeout(updatePlot, 1000);
+
 
     @guest
     @else
@@ -181,5 +228,80 @@ function stop() {
 
 live_temp.innerText = temperature.y[temperature.y.length - 1];
 live_volt.innerText = voltage.y[voltage.y.length - 1];
+</script>
+
+
+
+
+<script type="text/javascript">
+
+var server_status = {{ $measurement['status']['status']=="running" ? "true" : "false" }};
+var restart = false;
+
+function changeStatus($status) {
+  $('#status-button').removeClass('btn-success');
+  $('#status-button').removeClass('btn-secondary');
+  /// others...
+
+  switch($status){
+    case true:
+      $('#status-button').addClass('btn-success');
+
+      if (!server_status) 
+        server_status = true;
+      //else
+        //updateStatus(500)
+    break;
+
+    case false:
+      $('#status-button').addClass('btn-secondary');
+      
+      if (server_status) 
+        server_status = false;
+      //else
+        //updateStatus(500)
+    break;
+  }
+  $('#status-value').html($status ? 'Running...' : 'Not Running!');
+  
+  $('#loading').hide();
+}
+
+function updateStatus(delay) {
+  setTimeout(function() {
+    $.ajax({ url:  "/status/{{ $measurement['id'] }}" }).done(function( data ) {
+      console.log(data['status']);
+
+      switch(data['status']){
+          case "running":
+            changeStatus(true)
+          break;
+          default:
+            changeStatus(false)
+      }
+      
+    });
+  }, delay);
+}
+  
+
+function serverCommand(command) {
+  $('#loading').show();
+  switch(command) {
+    case 'start':
+      $.ajax({ url: "/start/{{ $measurement['id'] }}/{{ $measurement['duration'] }}" })
+    break;
+    case 'stop':
+      $.ajax({ url: "/stop" })
+    break;
+    case 'restart':
+      $.ajax({ url: "/stop" })
+
+    break;
+  }
+  updateStatus(1000);
+}
+
+
 </script>
 @endsection

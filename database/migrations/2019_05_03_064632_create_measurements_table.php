@@ -16,7 +16,9 @@ class CreateMeasurementsTable extends Migration
         Schema::create('measurements', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('title');
+            $table->integer('duration');
             $table->text('desc');
+            $table->string('status');
             $table->dateTime('first_time')->nullable();
             $table->timestamps();
         });

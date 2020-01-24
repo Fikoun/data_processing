@@ -17,11 +17,17 @@
 				    <label for="title">Presets</label>
 				    <select class="form-control" name="preset">
 				    	<option>-</option>
-				      <option> Temperature & Voltage </option>
+				      <option>Temperature & Voltage</option>
 				      <option>MOTES preasure chamber</option>
 				      <option>X-Band epr</option>
 				    </select>
 				 </div>
+
+				 <div class="form-group">
+				    <label for="duration">Duration</label>
+				    <input name="duration" type="number" class="form-control" placeholder="seconds">
+				</div>
+
 
 				<div class="form-group">
 				    <label for="description">Description</label>

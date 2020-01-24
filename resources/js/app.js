@@ -1,4 +1,4 @@
 require('./bootstrap');
 window.Vue = require('vue');
-require('./plot');
+require('./helpers.js');
 require('./bootstrap-slider');
