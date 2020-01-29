@@ -49,7 +49,7 @@ def interval(delay):
 	saveData(measurement_id, "temp", data["variables"]["temperature"], timestamp)
 	
 	# PREASSURE
-	saveData(measurement_id, "press", data["variables"]["preassure"], timestamp)
+	saveData(measurement_id, "press", data["variables"]["frequency"], timestamp)
 	
 	time.sleep(delay)
 	interval(delay)

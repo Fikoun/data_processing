@@ -1,6 +1,19 @@
 import serial
 import time
 import datetime
+from pprint import pprint
+
+def append_hex(a, b):
+    sizeof_b = 0
+
+    # get size of b in bits
+    while((b >> sizeof_b) > 0):
+        sizeof_b += 1
+
+    # align answer to nearest 4 bits (hex digit)
+    sizeof_b += sizeof_b % 4
+
+    return (a << sizeof_b) | b
 
 class SerialController():
 	def __init__(self, com, baud):
@@ -16,9 +29,9 @@ class SerialController():
 		if self.serial is not None:
 			self.serial.close()
 
-		time.sleep(500)
+		time.sleep(1)
 
-		self.serial = serial.Serial(self.com, self.baud, timeout=0.5)
+		self.serial = serial.Serial(self.com, self.baud, timeout=1)
 		
 		if self.serial.isOpen():
 			print("Successfully connected.")
@@ -30,51 +43,71 @@ class SerialController():
 
 	def serialSend(self, command, read=False):
 		if self.serial.isOpen():
-			self.serial.write(bytes(command, 'ascii'))
+			self.serial.write(command)
 		
 		#print(self.serial.read(8).decode('ascii'))
-		return self.serial.readline().decode()
+		return bytearray(self.serial.readline())
 
+	def composePacket(self, char):
+		message = bytes(char, 'ascii')[0]
+
+		hexsum = hex(0x10 + 0x80 + message)
+		cksum1 = (eval( '0x3' + hexsum[2] ))
+		cksum2 = (eval( '0x3' + hexsum[3] ))
+
+		# Composing a packet
+		packet = bytearray()
+		packet.append(0x02) # is always 0x02
+		packet.append(0x10) # is always 0x10 for STM-2
+		packet.append(0x80) # is always 0x80 when sending a command to STM-2
+		
+		packet.append(message)
+
+		packet.append(cksum1)
+		packet.append(cksum2)
+
+		packet.append(0x0D) # is always 0x0D
+
+		return packet
+
+	def readPacket(self, packet):
+		return packet[3:-3].decode("ascii") 
 
 
 	def test(self, mess):
-		start = "\x02"
-		command = "\x10\x80" + mess
-		end = "\x0D"
+		command = self.composePacket(mess)
+		response = self.serialSend(command, True)
+		data = self.readPacket(response)
 
-		checksum = hex(sum(command.encode('ascii')) % 256)
+		print("\tTEST:\t", data, "\n")
 
-		print("\tTEST:\t", self.serialSend(start + command + checksum + end, True), "\n")
+	def getFrequency(self):
+		command = self.composePacket("U")
+		response = self.serialSend(command, True)
+		return self.readPacket(response)
 
-
-#load knihoven
-#import ctypes
-#hllDll = ctypes.WinDLL ("C:\\xampp\\htdocs\\data_processing\\python\\SMDP_SVRPS.dll")
-
-print("\n\n\t\tSTM")
-
-<<<<<<< HEAD
 
 stm = SerialController("COM5", 115200)
 
-stm.test("0x021080403D300D")
-stm.test("<0x02><0x10><0x80><0x40><0x3D><0x30><0x0D>")
-#stm.test("\x02\x10\x80\x40\x3D\x30\x0D")
-#<STX><ADDR><CMD_RSP>[<DATA>...]<CKSUM1><CKSUM2><CR>
-=======
-stm.test("\x40")
+print("\n\n\t\tSTM")
+
+stm.test('@')
+
+print("Frequency: ", stm.getFrequency())
+print("Frequency: ", stm.getFrequency())
+print("Frequency: ", stm.getFrequency())
+print("Frequency: ", stm.getFrequency())
+print("Frequency: ", stm.getFrequency())
 
 
-# 
-# stm.test("\x02\x40\r")
+# packet = bytearray()
 
-# stm.test("\x08\x40\x03")
-# stm.test("\x08\x40\r")
->>>>>>> 3d2981811a3e5a947f1050bfb52fae7d5fc74795
+# packet.append(0x02)
+# packet.append(0x10)
+# packet.append(0x80)
+# packet.append(0x40)
+# packet.append(0x3D)
+# packet.append(0x30)
+# packet.append(0x0D)
 
-
-# stm.test("\x80@\r")
-
-
-# 0x02, 0x10, 
-# ser.write(serial.to_bytes([0x4C,0x12,0x01,0x00,0x03,0x40,0xFB,0x02,0x7a]))
+# print((stm.serialSend(packet)[3:-3]))

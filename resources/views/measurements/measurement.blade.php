@@ -36,9 +36,9 @@
         </ul>
 
 
-        <button class="btn nohover btn-outline-primary" id="toggleTemp">Temperature: <span id="live_temp">  </span> °C
+        <button class="btn nohover btn-outline-primary" id="toggleTemp">Temperature <span id="live_temp">  </span>
         </button>
-        <button class="btn nohover btn-outline-danger" id="toggleCurr">Current: <span id="live_volt">  </span> A</button>
+        <button class="btn nohover btn-outline-danger" id="toggleCurr">Frequency <span id="live_volt">  </span> </button>
     </div>
   </div>
 
@@ -48,13 +48,23 @@
         @include('measurements.plot')
         @guest
         @else
-          <div class="slidecontainer px-5">
-            <input type="range" min="0" max="5" value="0" class="slider" id="voltage">
-          </div>
-        
-        <h2 class="text-center py-4">
-          Voltage <span class="text-danger" id="voltage-display"></span>
-        </h2>
+
+        <h2 class="mt-5">Control Panel</h2>
+
+        <div class="row">
+          
+          
+          <fieldset class="col-md-6 border p-4 text-center m-5">
+             <legend  class="w-auto">Current</legend>
+
+             <input class="form-control w-auto d-inline-block" type="number" id="voltage-num" value="0">  <input class="btn btn-success  d-inline-block" type="button" id="voltage-num" value="SET">
+
+              <div class="slidecontainer px-5 my-4">
+                <input type="range" min="0" max="5" value="0" class="slider" id="voltage">
+             </div>
+          </fieldset>
+        </div>
+       
         @endguest
     </div>
     <div class="tab-pane fade" id="pills-settings" role="tabpanel" aria-labelledby="pills-settings-tab">
@@ -68,14 +78,21 @@
  <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
 
 <script>
-console.log({!! $data !!})
 
+
+var loading = true;
 var data = {!! $data !!};
+
+if (data.length == 1)
+    data.push([0,0,0])
+
+console.log(data)
+
 var options = {
   title: '{{ $measurement->title }}',
-  curveType: 'function',
+  curveType: 'line',
   legend: { position: 'bottom' },
-  colors: ["#eb4034", "#2e57d1"]
+  colors: ["#2e57d1"]       
 };
 var chart = null;
 
@@ -85,42 +102,70 @@ google.charts.setOnLoadCallback(drawChart);
 function drawChart() {
   data = google.visualization.arrayToDataTable( data );
 
+  view = new google.visualization.DataView(data);
+  if (isCurr)
+      view.hideColumns([2]);
+  else
+      view.hideColumns([1]);
+
   chart = new google.visualization.LineChart(document.getElementById('plot'));
 
-  chart.draw(data, options);
+  chart.draw(view, options);
 }
 var isTemp = true, isCurr = true;
 
-var toggleTemp = document.getElementById("toggleTemp");
-toggleTemp.onclick = function()
-{
-  view = new google.visualization.DataView(data);
-  if (isTemp) {
-    view.hideColumns([2]); 
-    
-    isTemp = false
-  }else{
-    isTemp = true
-  }
-  chart.draw(view, options);
-}
-
 var toggleCurr = document.getElementById("toggleCurr");
+var toggleTemp = document.getElementById("toggleTemp");
+
 toggleCurr.onclick = function()
 {
-  view = new google.visualization.DataView(data);
-  if (isCurr) {
-    view.hideColumns([1]); 
-    isCurr = false
-  }else{
-    isCurr = true
-  }
-  chart.draw(view, options);
-}
-drawChart();
+  if (isTemp) {
+    view = new google.visualization.DataView(data);
+    view.hideColumns([2]);
 
-var data = [temperature, voltage];
-console.log(data);
+    toggleCurr.classList.remove("btn-outline-danger");
+    toggleCurr.classList.add("btn-danger");
+
+    options.colors = ["#eb4034"];
+    
+    isTemp = false
+
+    ////
+
+    toggleTemp.classList.remove("btn-primary");
+    toggleTemp.classList.add("btn-outline-primary");
+
+    isCurr = true
+    
+    chart.draw(view, options);
+  }
+}
+
+
+toggleTemp.onclick = function()
+{
+  if (isCurr) {
+    view = new google.visualization.DataView(data);
+    view.hideColumns([1]); 
+
+    toggleTemp.classList.remove("btn-outline-primary");
+    toggleTemp.classList.add("btn-primary");
+
+    options.colors = ["#2e57d1"];
+
+    ////
+
+    toggleCurr.classList.remove("btn-danger");
+    toggleCurr.classList.add("btn-outline-danger");
+
+    isTemp = true
+
+    isCurr = false
+    chart.draw(view, options);
+  }
+  
+}
+
 
 var layout = {
   title: "{{ $measurement->title }}",
@@ -140,7 +185,7 @@ var layout = {
     side: 'right',
   }
 };
-Plotly.newPlot('plot', data, layout, { scrollZoom: true, responsive: true });
+// Plotly.newPlot('plot', data, layout, { scrollZoom: true, responsive: true });
 
 var slider = document.getElementById("voltage");
 var output = document.getElementById("voltage-display");
@@ -178,20 +223,21 @@ slider.oninput = function() {
 function updatePlot() {
   $.get("{{ route('ajax_update', $measurement->id) }}",
   function(data){
-    temperature.x = JSON.parse(data.dataTemp.x)
-    temperature.y = JSON.parse(data.dataTemp.y)
-  
-    voltage.x = JSON.parse(data.dataVolt.x)
-    voltage.y = JSON.parse(data.dataVolt.y)
-  
-    data = [temperature, voltage];
-    console.log(data);
-    Plotly.react('plot', data, layout, { scrollZoom: true, responsive: true });
-    output.innerHTML = slider.value;
-    live_temp.innerText = temperature.y[temperature.y.length - 1];
-    live_volt.innerText = voltage.y[voltage.y.length - 1];
+    data = JSON.parse(data.data)
+
+    data = google.visualization.arrayToDataTable( data );
+
+    view = new google.visualization.DataView(data);
+    if (isCurr)
+      view.hideColumns([2]);
+    else
+      view.hideColumns([1]);
+
+    chart.draw(view, options);
     
     updateStatus(100);
+
+    console.log(data)
     
     if (loading)
       setTimeout(updatePlot, 1000);
@@ -204,7 +250,7 @@ function updatePlot() {
 
   });
 }
-setTimeout(updatePlot, 1000);
+
 
 function updateVolt(volt) {
   $.get("{{ route('ajax_update_volt', $measurement->id) }}", {volt: volt},
@@ -213,7 +259,6 @@ function updateVolt(volt) {
   });
 }
 
-var loading = true;
 function stop() {
   if (loading) {
     loading = false;
@@ -223,7 +268,6 @@ function stop() {
     document.getElementById('stop').innerText = "Stop"
     setTimeout(updatePlot, 10);
   }
-  
 }
 
 live_temp.innerText = temperature.y[temperature.y.length - 1];
@@ -300,7 +344,10 @@ function serverCommand(command) {
     break;
   }
   updateStatus(1000);
+  updatePlot();
 }
+
+drawChart();
 
 
 </script>

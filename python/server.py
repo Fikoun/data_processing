@@ -81,6 +81,43 @@ class SerialController():
 	def output(self, value=False):
 		self.serialSend(f"OUT{int(value)}")
 
+	def serialSendPacket(self, command, read=False):
+		if self.serial.isOpen():
+			self.serial.write(command)
+		
+		#print(self.serial.read(8).decode('ascii'))
+		return bytearray(self.serial.readline())
+
+	def composePacket(self, char):
+		message = bytes(char, 'ascii')[0]
+
+		hexsum = hex(0x10 + 0x80 + message)
+		cksum1 = (eval( '0x3' + hexsum[2] ))
+		cksum2 = (eval( '0x3' + hexsum[3] ))
+
+		# Composing a packet
+		packet = bytearray()
+		packet.append(0x02) # is always 0x02
+		packet.append(0x10) # is always 0x10 for STM-2
+		packet.append(0x80) # is always 0x80 when sending a command to STM-2
+		
+		packet.append(message)
+
+		packet.append(cksum1)
+		packet.append(cksum2)
+
+		packet.append(0x0D) # is always 0x0D
+
+		return packet
+
+	def readPacket(self, packet):
+		return packet[3:-3].decode("ascii") 
+
+	def getFrequency(self):
+		command = self.composePacket("U")
+		response = self.serialSendPacket(command, True)
+		return self.readPacket(response)
+
 
 class RequestHandler(BaseHTTPRequestHandler):
 	def do_GET(self):
@@ -106,11 +143,15 @@ class RequestHandler(BaseHTTPRequestHandler):
 		# For getting data use "get"
 		if self.path.startswith("/get"):
 			temp, time = thermocouple.getTempTime()
+			frequency = stm.getFrequency()
 			preassure = preassure_meter.serialRead()
 
 			self.wfile.write(json.dumps({
-				'variables': {'temperature': temp,
-							  'preassure'  : preassure},
+				'variables': {
+						'temperature': temp,
+						'frequency': frequency,
+						'preassure'  : preassure
+				},
 				'time': time,
 			}).encode())
 
@@ -126,7 +167,8 @@ if __name__ == '__main__':
 	# Setup power supply
 
 	print(os.getpid())
-	print("\n\n\t\tPOWER SUPPLY")
+	
+	#print("\n\n\t\tPOWER SUPPLY")
 	#supply = SerialController("COM4", 9600)
 	#supply.test()
 	# Disable output and reset channels
@@ -145,6 +187,11 @@ if __name__ == '__main__':
 	print("\n\n\t\tPRESSURE")
 	preassure_meter = SerialController("COM7", 9600)
 	preassure_meter.serialRead()
+
+	# Setup preassure
+	print("\n\n\t\tSTM")
+	stm = SerialController("COM5", 115200)
+	stm.getFrequency()
 	
 	
 	# Setup Http Server

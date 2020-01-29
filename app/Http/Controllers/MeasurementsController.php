@@ -89,9 +89,12 @@ class MeasurementsController extends Controller
         $measurement = Measurement::find($id);
                
         //$this->insertRandomData($id);
+
+        $data = $this->composeData($measurement->temp, $this->composeData($measurement->press, []));
+        array_unshift($data, ['Time', 'Frequency', 'Temperature'] );
         
-        return ["dataTemp" => $this->composeData($measurement->temp),
-                "dataVolt" => $this->composeData($measurement->volt)];   
+        return ["data" => json_encode($data)];
+              
     }
 
     public function ajaxUpdateVolt($id)
@@ -141,8 +144,8 @@ class MeasurementsController extends Controller
                 break;
         }
 
-        $data = $this->composeData($measurement->temp, $this->composeData($measurement->volt, []));
-        array_unshift($data, ['Time', 'Current', 'Temperature'] );
+        $data = $this->composeData($measurement->temp, $this->composeData($measurement->press, []));
+        array_unshift($data, ['Time', 'Frequency', 'Temperature'] );
 
     	return view('measurements.measurement', [
     		"data" => json_encode($data),

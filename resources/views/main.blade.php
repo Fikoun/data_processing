@@ -10,6 +10,7 @@
         <link rel="shortcut icon" href="{{{ asset('favico.ico') }}}">
         <link href="{{ asset('css/app.css') }}" rel="stylesheet" type="text/css">
         <script type="text/javascript" src="{{ asset('js/plotly.js') }}"></script>
+        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
     </head>
     <body>
         <div class="app">
