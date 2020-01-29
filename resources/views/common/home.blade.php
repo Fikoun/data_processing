@@ -24,7 +24,7 @@
 			<div class="card text-center bg-light card ">
 			  <h5 class="card-header">Evaporation Chamber</h5>
 			  <div class="card-body">
-			    <img src="{{{ asset('chamber.jpg') }}}" height="200px"> <br>
+			    <img src="{{{ asset('chamber.png') }}}" height="200px"> <br>
 			    <a href="{{ route('measurement_last') }}" class="btn btn-success my-3">Open measurement</a>
 			  </div>
 			</div>
